@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'map_screen.dart';
+import 'map_screen.dart';
 
 // ─── Constants (same as login) ───────────────────────────────────────────────
 const Color kPrimaryGreen  = Color(0xFF1A7A4A);
@@ -100,7 +102,17 @@ class _HomeDashboardState extends State<HomeDashboard>
             SliverToBoxAdapter(child: _buildBanner()),
             SliverToBoxAdapter(child: _buildSectionHeader('Services', 'See all')),
             SliverToBoxAdapter(child: _buildCategories()),
-            SliverToBoxAdapter(child: _buildSectionHeader('Nearby Workers', 'View map')),
+            SliverToBoxAdapter(child: _buildSectionHeader('Nearby Workers', 'View map',
+              onActionTap: () => Navigator.push(
+                context,
+                PageRouteBuilder(
+                  pageBuilder: (_, animation, __) => const MapScreen(),
+                  transitionsBuilder: (_, animation, __, child) =>
+                    FadeTransition(opacity: animation, child: child),
+                  transitionDuration: const Duration(milliseconds: 350),
+                ),
+              ),
+            )),
             SliverToBoxAdapter(child: _buildWorkersList()),
             SliverToBoxAdapter(child: _buildRecentJobsHeader()),
             SliverToBoxAdapter(child: _buildRecentJobs()),
@@ -367,7 +379,7 @@ class _HomeDashboardState extends State<HomeDashboard>
   }
 
   // ── Section header ─────────────────────────────────────────────────────────
-  Widget _buildSectionHeader(String title, String action) {
+  Widget _buildSectionHeader(String title, String action, {VoidCallback? onActionTap}) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 24, 16, 12),
       child: Row(
@@ -380,12 +392,15 @@ class _HomeDashboardState extends State<HomeDashboard>
                 fontWeight: FontWeight.w800,
                 letterSpacing: -0.3,
               )),
-          Text(action,
-              style: const TextStyle(
-                color: kAccentGreen,
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-              )),
+          GestureDetector(
+            onTap: onActionTap,
+            child: Text(action,
+                style: const TextStyle(
+                  color: kAccentGreen,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                )),
+          ),
         ],
       ),
     );

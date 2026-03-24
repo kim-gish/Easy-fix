@@ -70,6 +70,8 @@ class DefaultFirebaseOptions {
     messagingSenderId: '81769276171',
     projectId: 'easyfix-ae381',
     storageBucket: 'easyfix-ae381.firebasestorage.app',
+    iosClientId: '81769276171-a2kiavddn49p2ssagkqgniu3r03h0fpj.apps.googleusercontent.com',
     iosBundleId: 'com.example.flutterApplication1',
   );
+
 }

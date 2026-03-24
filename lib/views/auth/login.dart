@@ -89,8 +89,8 @@ class _LoginScreenState extends State<LoginScreen>
   void _goHome() {
     Navigator.of(context).pushAndRemoveUntil(
       PageRouteBuilder(
-        pageBuilder: (_, animation, __) => const HomeDashboard(),
-        transitionsBuilder: (_, animation, __, child) {
+        pageBuilder: (_, animation, _) => const HomeDashboard(),
+        transitionsBuilder: (_, animation, _, child) {
           return FadeTransition(
             opacity: animation,
             child: SlideTransition(
