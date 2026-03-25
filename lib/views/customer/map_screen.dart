@@ -238,7 +238,7 @@ class _MapScreenState extends State<MapScreen> with TickerProviderStateMixin {
               initialZoom: 15.0,
               maxZoom: 19.0,
               minZoom: 5.0,
-              onTap: (_, __) => _deselectWorker(),
+              onTap: (_, _) => _deselectWorker(),
             ),
             children: [
               // Map tiles
@@ -765,5 +765,6 @@ class _MapScreenState extends State<MapScreen> with TickerProviderStateMixin {
           )),
       ]),
     );
+    
   }
 }

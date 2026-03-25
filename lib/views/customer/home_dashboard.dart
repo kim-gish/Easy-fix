@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'map_screen.dart';
-import 'map_screen.dart';
 
 // ─── Constants (same as login) ───────────────────────────────────────────────
 const Color kPrimaryGreen  = Color(0xFF1A7A4A);
@@ -106,8 +105,8 @@ class _HomeDashboardState extends State<HomeDashboard>
               onActionTap: () => Navigator.push(
                 context,
                 PageRouteBuilder(
-                  pageBuilder: (_, animation, __) => const MapScreen(),
-                  transitionsBuilder: (_, animation, __, child) =>
+                  pageBuilder: (_, animation, _) => const MapScreen(),
+                  transitionsBuilder: (_, animation, _, child) =>
                     FadeTransition(opacity: animation, child: child),
                   transitionDuration: const Duration(milliseconds: 350),
                 ),
