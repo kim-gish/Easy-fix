@@ -176,47 +176,43 @@ class _BookingScreenState extends State<BookingScreen>
 
   // ── Submit booking to Firestore ────────────────────────────────────────────
   Future<void> _submitBooking() async {
-    if (!_validateStep()) return;
-    setState(() { _isSubmitting = true; _errorMessage = null; });
+  if (!_validateStep()) return;
+  setState(() { _isSubmitting = true; _errorMessage = null; });
 
-    try {
-      final user = FirebaseAuth.instance.currentUser;
-      if (user == null) throw Exception('Not logged in');
+  try {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) throw Exception('Not logged in');
 
-      // Create job document in Firestore
-      final jobRef = await FirebaseFirestore.instance
-          .collection('jobs')
-          .add({
-        'userId':      user.uid,
-        'userName':    user.displayName ?? 'User',
-        'workerId':    widget.workerId,
-        'workerName':  widget.workerName,
-        'category':    _selectedCategory,
-        'description': _descriptionCtrl.text.trim(),
-        'location':    _locationCtrl.text.trim(),
-        'date':        _formattedDate,
-        'time':        _formattedTime,
-        'budget':      _budgetCtrl.text.trim().isEmpty
-            ? 'Negotiable'
-            : 'KES ${_budgetCtrl.text.trim()}',
-        'status':      'pending',
-        'escrowHeld':      false,
-        'escrowReleased':  false,
-        'amount':      0,
-        'createdAt':   DateTime.now().toIso8601String(),
-      });
+    // Create job document in Firestore
+    final jobRef = await FirebaseFirestore.instance
+        .collection('jobs')
+        .add({
+      'workerId':     widget.workerId,      // The Professional's ID
+      'customerId':   user.uid,             // renamed from userId to be clearer
+      'customerName': user.displayName ?? 'Client', 
+      'serviceType':  _selectedCategory,    // renamed to match dashboard expectation
+      'description':  _descriptionCtrl.text.trim(),
+      'location':     _locationCtrl.text.trim(),
+      'scheduledDate': _formattedDate,
+      'scheduledTime': _formattedTime,
+      'budget':       _budgetCtrl.text.trim().isEmpty
+          ? 'Negotiable'
+          : 'KES ${_budgetCtrl.text.trim()}',
+      'status':       'pending',            // MUST BE LOWERCASE
+      'timestamp':    FieldValue.serverTimestamp(), // USE THIS for ordering/sorting!
+      'createdAt':    DateTime.now().toIso8601String(),
+    });
 
-      if (mounted) {
-        // Show success screen
-        _showSuccessSheet(jobRef.id);
-      }
-    } catch (e) {
-      setState(() =>
-          _errorMessage = 'Failed to submit booking. Please try again.');
-    } finally {
-      if (mounted) setState(() => _isSubmitting = false);
+    if (mounted) {
+      _showSuccessSheet(jobRef.id);
     }
+  } catch (e) {
+    debugPrint("Booking Error: $e"); // Helpful for your terminal
+    setState(() => _errorMessage = 'Failed to submit booking.');
+  } finally {
+    if (mounted) setState(() => _isSubmitting = false);
   }
+}
 
   // ── Success bottom sheet ───────────────────────────────────────────────────
   void _showSuccessSheet(String jobId) {

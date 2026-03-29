@@ -14,7 +14,7 @@ const Color kTextPrimary   = Color(0xFFFFFFFF);
 const Color kTextSecondary = Color(0xFF9E9E9E);
 
 class WorkerDashboard extends StatefulWidget {
-   WorkerDashboard({super.key});
+  const WorkerDashboard({super.key});
 
   @override
   State<WorkerDashboard> createState() => _WorkerDashboardState();
@@ -54,7 +54,6 @@ class _WorkerDashboardState extends State<WorkerDashboard>
     super.dispose();
   }
 
-  // ── Load worker data from Firestore ───────────────────────────────────────
   Future<void> _loadWorkerData() async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return;
@@ -81,7 +80,6 @@ class _WorkerDashboardState extends State<WorkerDashboard>
     }
   }
 
-  // ── Toggle availability ────────────────────────────────────────────────────
   Future<void> _toggleAvailability() async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return;
@@ -114,7 +112,6 @@ class _WorkerDashboardState extends State<WorkerDashboard>
     );
   }
 
-  // ── App bar ────────────────────────────────────────────────────────────────
   Widget _buildAppBar() {
     return SliverAppBar(
       backgroundColor: kDarkBg,
@@ -180,7 +177,6 @@ class _WorkerDashboardState extends State<WorkerDashboard>
     );
   }
 
-  // ── Availability card ──────────────────────────────────────────────────────
   Widget _buildAvailabilityCard() {
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
@@ -270,7 +266,6 @@ class _WorkerDashboardState extends State<WorkerDashboard>
     );
   }
 
-  // ── Stats row ──────────────────────────────────────────────────────────────
   Widget _buildStatsRow() {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
@@ -308,7 +303,6 @@ class _WorkerDashboardState extends State<WorkerDashboard>
     );
   }
 
-  // ── Tab bar ────────────────────────────────────────────────────────────────
   Widget _buildTabBar() {
     final tabs = ['Requests', 'History'];
     return Padding(
@@ -348,56 +342,62 @@ class _WorkerDashboardState extends State<WorkerDashboard>
     );
   }
 
-  // ── Tab content ────────────────────────────────────────────────────────────
   Widget _buildTabContent() {
     return _selectedTab == 0
         ? _buildJobRequests()
         : _buildJobHistory();
   }
 
-  // ── Job Requests ───────────────────────────────────────────────────────────
-  Widget _buildJobRequests() {
-    final uid = FirebaseAuth.instance.currentUser?.uid;
-    return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('jobs')
-          .where('workerId', isEqualTo: uid)
-          .where('status', isEqualTo: 'pending')
-          .snapshots(),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Padding(
-            padding: EdgeInsets.all(40),
-            child: Center(child: CircularProgressIndicator(
-                color: kAccentGreen, strokeWidth: 2)),
-          );
-        }
-
-        final jobs = snapshot.data?.docs ?? [];
-
-        if (jobs.isEmpty) {
-          return _emptyState(
-            emoji: '📭',
-            title: 'No pending requests',
-            subtitle: _isAvailable
-                ? 'New job requests will appear here'
-                : 'Go online to receive requests',
-          );
-        }
-
-        return Padding(
-          padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
-          child: Column(
-            children: jobs.map((doc) {
-              final data = doc.data() as Map<String, dynamic>;
-              return _jobRequestCard(doc.id, data);
-            }).toList(),
-          ),
-        );
-      },
+Widget _buildJobRequests() {
+  final User? user = FirebaseAuth.instance.currentUser;
+  
+  if (user == null) {
+    return const Center(
+      child: Text("Waiting for Auth...", style: TextStyle(color: kTextSecondary))
     );
   }
 
+  return StreamBuilder<QuerySnapshot>(
+    // We remove all filters just to see IF any jobs exist in the collection
+    stream: FirebaseFirestore.instance.collection('jobs').snapshots(),
+    builder: (context, snapshot) {
+      if (snapshot.hasError) return Text("Error: ${snapshot.error}");
+      
+      if (snapshot.connectionState == ConnectionState.waiting) {
+        return const Center(child: CircularProgressIndicator(color: kAccentGreen));
+      }
+
+      final allDocs = snapshot.data?.docs ?? [];
+      
+      // Filter manually in Dart so we can debug the IDs
+      final myJobs = allDocs.where((doc) {
+        final data = doc.data() as Map<String, dynamic>;
+        // This is where the "Handshake" happens
+        return data['workerId'] == user.uid;
+      }).toList();
+
+      if (myJobs.isEmpty) {
+        return Column(
+          children: [
+            _emptyState(
+              emoji: '🔍',
+              title: 'No Jobs Found',
+              subtitle: 'Searching for ID: ${user.uid.substring(0,5)}...',
+            ),
+            ElevatedButton(
+              onPressed: () => setState(() {}), 
+              child: const Text("Force Refresh"),
+            )
+          ],
+        );
+      }
+
+      return Column(
+        children: myJobs.map((doc) => _jobRequestCard(doc.id, doc.data() as Map<String, dynamic>)).toList(),
+      );
+    },
+  );
+}
   Widget _jobRequestCard(String jobId, Map<String, dynamic> data) {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -417,20 +417,20 @@ class _WorkerDashboardState extends State<WorkerDashboard>
                 color: kPrimaryGreen.withOpacity(0.15),
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: const Center(child: Text('🔧',
+              child: const Center(child: Text('👤',
                   style: TextStyle(fontSize: 20))),
             ),
             const SizedBox(width: 12),
             Expanded(child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(data['category'] ?? 'Repair Job',
+                Text(data['customerName'] ?? 'Client Request',
                   style: const TextStyle(color: kTextPrimary,
                     fontSize: 15, fontWeight: FontWeight.w800)),
-                Text(data['description'] ?? 'No description',
+                Text(data['serviceType'] ?? 'General Repair',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(color: kTextSecondary, fontSize: 12)),
+                  style: const TextStyle(color: kAccentGreen, fontSize: 12, fontWeight: FontWeight.w600)),
               ],
             )),
             Container(
@@ -450,17 +450,16 @@ class _WorkerDashboardState extends State<WorkerDashboard>
           const SizedBox(height: 12),
 
           Row(children: [
-            const Icon(Icons.location_on_outlined,
+            const Icon(Icons.access_time_rounded,
                 color: kTextSecondary, size: 14),
             const SizedBox(width: 4),
-            Text(data['location'] ?? 'Location not set',
+            Text("Awaiting your response",
               style: const TextStyle(color: kTextSecondary, fontSize: 12)),
           ]),
 
           const SizedBox(height: 14),
 
           Row(children: [
-            // Decline button
             Expanded(child: GestureDetector(
               onTap: () => _updateJobStatus(jobId, 'declined'),
               child: Container(
@@ -476,7 +475,6 @@ class _WorkerDashboardState extends State<WorkerDashboard>
               ),
             )),
             const SizedBox(width: 10),
-            // Accept button
             Expanded(flex: 2, child: GestureDetector(
               onTap: () => _updateJobStatus(jobId, 'accepted'),
               child: Container(
@@ -502,18 +500,18 @@ class _WorkerDashboardState extends State<WorkerDashboard>
     );
   }
 
+  // ── Updated: Pointing back to 'jobs' ──────────────────────────────────────
   Future<void> _updateJobStatus(String jobId, String status) async {
     await FirebaseFirestore.instance
         .collection('jobs').doc(jobId)
         .update({'status': status});
   }
 
-  // ── Job History ────────────────────────────────────────────────────────────
   Widget _buildJobHistory() {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance
-          .collection('jobs')
+          .collection('jobs') // Reverted to 'jobs'
           .where('workerId', isEqualTo: uid)
           .where('status', isEqualTo: 'completed')
           .snapshots(),
@@ -526,20 +524,20 @@ class _WorkerDashboardState extends State<WorkerDashboard>
           );
         }
 
-        final jobs = snapshot.data?.docs ?? [];
+        final historyList = snapshot.data?.docs ?? [];
 
-        if (jobs.isEmpty) {
+        if (historyList.isEmpty) {
           return _emptyState(
             emoji: '📋',
-            title: 'No completed jobs yet',
-            subtitle: 'Your finished jobs will appear here',
+            title: 'No history',
+            subtitle: 'Your completed jobs will appear here',
           );
         }
 
         return Padding(
           padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
           child: Column(
-            children: jobs.map((doc) {
+            children: historyList.map((doc) {
               final data = doc.data() as Map<String, dynamic>;
               return _historyCard(data);
             }).toList(),
@@ -572,34 +570,22 @@ class _WorkerDashboardState extends State<WorkerDashboard>
         Expanded(child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(data['category'] ?? 'Repair Job',
+            Text(data['serviceType'] ?? 'Repair Job',
               style: const TextStyle(color: kTextPrimary,
                 fontSize: 14, fontWeight: FontWeight.w700)),
-            Text(data['createdAt']?.toString().substring(0, 10) ?? '',
+            Text("Client: ${data['customerName'] ?? 'Unknown'}",
               style: const TextStyle(color: kTextSecondary, fontSize: 12)),
           ],
         )),
         Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-          Text('KES ${data['amount'] ?? 0}',
-            style: const TextStyle(color: kTextPrimary,
-              fontSize: 13, fontWeight: FontWeight.w700)),
-          const SizedBox(height: 4),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-            decoration: BoxDecoration(
-              color: kAccentGreen.withOpacity(0.15),
-              borderRadius: BorderRadius.circular(6),
-            ),
-            child: const Text('Completed',
+          const Text('Completed',
               style: TextStyle(color: kAccentGreen,
                 fontSize: 10, fontWeight: FontWeight.w700)),
-          ),
         ]),
       ]),
     );
   }
 
-  // ── Empty state ────────────────────────────────────────────────────────────
   Widget _emptyState({required String emoji, required String title,
       required String subtitle}) {
     return Padding(
@@ -616,7 +602,6 @@ class _WorkerDashboardState extends State<WorkerDashboard>
     );
   }
 
-  // ── Bottom nav ─────────────────────────────────────────────────────────────
   Widget _buildBottomNav() {
     return Container(
       decoration: BoxDecoration(
