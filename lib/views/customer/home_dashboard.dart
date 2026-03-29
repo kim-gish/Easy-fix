@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'map_screen.dart';
+import '../booking/booking_screen.dart';
 
 // ─── Constants (same as login) ───────────────────────────────────────────────
 const Color kPrimaryGreen  = Color(0xFF1A7A4A);
@@ -20,6 +21,7 @@ class ServiceCategory {
 }
 
 class NearbyWorker {
+  final String id;
   final String initials;
   final String name;
   final String trade;
@@ -27,6 +29,7 @@ class NearbyWorker {
   final String distance;
   final bool isAvailable;
   const NearbyWorker({
+    required this.id,
     required this.initials,
     required this.name,
     required this.trade,
@@ -60,10 +63,10 @@ class _HomeDashboardState extends State<HomeDashboard>
   ];
 
   final List<NearbyWorker> _workers = const [
-    NearbyWorker(initials: 'JK', name: 'James Kamau',  trade: 'Plumber',     rating: 4.9, distance: '0.3 km', isAvailable: true),
-    NearbyWorker(initials: 'AO', name: 'Amina Odhiambo', trade: 'Electrician', rating: 4.7, distance: '0.7 km', isAvailable: true),
-    NearbyWorker(initials: 'PM', name: 'Peter Mwangi',  trade: 'Handyman',    rating: 4.5, distance: '1.2 km', isAvailable: false),
-    NearbyWorker(initials: 'GN', name: 'Grace Njeri',   trade: 'Cleaner',     rating: 4.8, distance: '1.5 km', isAvailable: true),
+    NearbyWorker(id: 'worker_1', initials: 'JK', name: 'James Kamau',    trade: 'Plumber',     rating: 4.9, distance: '0.3 km', isAvailable: true),
+    NearbyWorker(id: 'worker_2', initials: 'AO', name: 'Amina Odhiambo', trade: 'Electrician', rating: 4.7, distance: '0.7 km', isAvailable: true),
+    NearbyWorker(id: 'worker_3', initials: 'PM', name: 'Peter Mwangi',   trade: 'Handyman',    rating: 4.5, distance: '1.2 km', isAvailable: false),
+    NearbyWorker(id: 'worker_4', initials: 'GN', name: 'Grace Njeri',    trade: 'Cleaner',     rating: 4.8, distance: '1.5 km', isAvailable: true),
   ];
 
   @override
@@ -105,8 +108,8 @@ class _HomeDashboardState extends State<HomeDashboard>
               onActionTap: () => Navigator.push(
                 context,
                 PageRouteBuilder(
-                  pageBuilder: (_, animation, _) => const MapScreen(),
-                  transitionsBuilder: (_, animation, _, child) =>
+                  pageBuilder: (_, animation, __) => const MapScreen(),
+                  transitionsBuilder: (_, animation, __, child) =>
                     FadeTransition(opacity: animation, child: child),
                   transitionDuration: const Duration(milliseconds: 350),
                 ),
@@ -463,7 +466,7 @@ class _HomeDashboardState extends State<HomeDashboard>
   // ── Workers list ───────────────────────────────────────────────────────────
   Widget _buildWorkersList() {
     return SizedBox(
-      height: 170,
+      height: 200,
       child: ListView.builder(
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -475,86 +478,152 @@ class _HomeDashboardState extends State<HomeDashboard>
   }
 
   Widget _workerCard(NearbyWorker w) {
-    return Container(
-      width: 140,
-      margin: const EdgeInsets.only(right: 12),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: kCardBg,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: kBorder),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
+    return GestureDetector(
+      onTap: () {
+        if (!w.isAvailable) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Text('This worker is currently unavailable.',
+                  style: TextStyle(color: Colors.white)),
+              backgroundColor: const Color(0xFF333333),
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12)),
+              margin: const EdgeInsets.all(16),
+            ),
+          );
+          return;
+        }
+        Navigator.push(
+          context,
+          PageRouteBuilder(
+            pageBuilder: (_, animation, __) => BookingScreen(
+              workerId:    w.id,
+              workerName:  w.name,
+              workerTrade: w.trade,
+              workerRating: w.rating,
+              workerInitials: w.initials,
+              distance:    w.distance,
+            ),
+            transitionsBuilder: (_, animation, __, child) =>
+                SlideTransition(
+                  position: Tween<Offset>(
+                    begin: const Offset(0, 1),
+                    end: Offset.zero,
+                  ).animate(CurvedAnimation(
+                      parent: animation, curve: Curves.easeOut)),
+                  child: child,
+                ),
+            transitionDuration: const Duration(milliseconds: 400),
+          ),
+        );
+      },
+      child: Container(
+        width: 140,
+        margin: const EdgeInsets.only(right: 12),
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: kCardBg,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: kBorder),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [kPrimaryGreen, kAccentGreen],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: Center(
+                    child: Text(w.initials,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w800,
+                          fontSize: 14,
+                        )),
+                  ),
+                ),
+                Container(
+                  width: 8,
+                  height: 8,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: w.isAvailable
+                        ? const Color(0xFF4CAF50)
+                        : const Color(0xFF9E9E9E),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Text(w.name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: kTextPrimary,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                )),
+            const SizedBox(height: 2),
+            Text(w.trade,
+                style: const TextStyle(
+                    color: kTextSecondary, fontSize: 11)),
+            const Spacer(),
+            Row(
+              children: [
+                const Icon(Icons.star_rounded,
+                    color: Color(0xFFFFC107), size: 13),
+                const SizedBox(width: 3),
+                Text(w.rating.toString(),
+                    style: const TextStyle(
+                      color: kTextPrimary,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    )),
+                const Spacer(),
+                Text(w.distance,
+                    style: const TextStyle(
+                      color: kTextSecondary,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w500,
+                    )),
+              ],
+            ),
+            if (w.isAvailable) ...[
+              const SizedBox(height: 8),
               Container(
-                width: 44,
-                height: 44,
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(vertical: 6),
                 decoration: BoxDecoration(
                   gradient: const LinearGradient(
                     colors: [kPrimaryGreen, kAccentGreen],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
+                    begin: Alignment.centerLeft,
+                    end: Alignment.centerRight,
                   ),
-                  borderRadius: BorderRadius.circular(14),
+                  borderRadius: BorderRadius.circular(8),
                 ),
-                child: Center(
-                  child: Text(w.initials,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w800,
-                        fontSize: 14,
-                      )),
-                ),
-              ),
-              Container(
-                width: 8,
-                height: 8,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: w.isAvailable
-                      ? const Color(0xFF4CAF50)
-                      : const Color(0xFF9E9E9E),
+                child: const Center(
+                  child: Text('Book',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                    )),
                 ),
               ),
             ],
-          ),
-          const SizedBox(height: 10),
-          Text(w.name,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                color: kTextPrimary,
-                fontSize: 13,
-                fontWeight: FontWeight.w700,
-              )),
-          const SizedBox(height: 2),
-          Text(w.trade,
-              style: const TextStyle(color: kTextSecondary, fontSize: 11)),
-          const Spacer(),
-          Row(
-            children: [
-              const Icon(Icons.star_rounded, color: Color(0xFFFFC107), size: 13),
-              const SizedBox(width: 3),
-              Text(w.rating.toString(),
-                  style: const TextStyle(
-                    color: kTextPrimary,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                  )),
-              const Spacer(),
-              Text(w.distance,
-                  style: const TextStyle(
-                    color: kTextSecondary,
-                    fontSize: 10,
-                    fontWeight: FontWeight.w500,
-                  )),
-            ],
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

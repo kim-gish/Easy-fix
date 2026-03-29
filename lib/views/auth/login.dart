@@ -170,15 +170,17 @@ Future<void> _signIn() async {
   Future<void> _signUp() async {
     if (!_formKey.currentState!.validate()) return;
     setState(() { _isLoading = true; _errorMessage = null; });
+
     try {
-      final credential =
-          await FirebaseAuth.instance.createUserWithEmailAndPassword(
+      // 1. Create Auth Account
+      final credential = await FirebaseAuth.instance.createUserWithEmailAndPassword(
         email:    _emailController.text.trim(),
         password: _passwordController.text.trim(),
       );
+      
       await credential.user?.updateDisplayName(_nameController.text.trim());
 
-      // Save user to Firestore
+      // 2. Save user to Firestore
       await FirebaseFirestore.instance
           .collection('users')
           .doc(credential.user!.uid)
@@ -186,18 +188,26 @@ Future<void> _signIn() async {
         'name':      _nameController.text.trim(),
         'phone':     _phoneController.text.trim(),
         'email':     _emailController.text.trim(),
-        'role':      'customer',
+        'role':      'customer', // Added for your login logic
         'photoUrl':  '',
         'rating':    0,
-        'createdAt': FieldValue.serverTimestamp(),
+        'createdAt': FieldValue.serverTimestamp(), // Better for sorting
       });
 
       if (mounted) _goHome();
+
+    // ─── START OF THE IMPLEMENTATION ───
     } on FirebaseAuthException catch (e) {
+      // Catches Auth-specific errors (e.g. email already in use)
       setState(() => _errorMessage = _friendlyError(e.code));
+    } catch (e) {
+      // Catches EVERYTHING else (Firestore permission errors, timeout, etc.)
+      debugPrint("Firestore Error: $e"); 
+      setState(() => _errorMessage = "Account created, but profile failed to save.");
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
+    // ─── END OF THE IMPLEMENTATION ───
   }
 
   // ── Google Sign In — FIXED for google_sign_in 6.x ─────────────────────────
