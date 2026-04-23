@@ -1,78 +1,68 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:url_launcher/url_launcher.dart'; 
 import 'map_screen.dart';
 import '../booking/booking_screen.dart';
+import '../booking/job_status_screen.dart';
 
-// ─── Constants (STYLING PRESERVED) ──────────────────────────────────────────
 const Color kPrimaryGreen  = Color(0xFF1A7A4A);
 const Color kAccentGreen   = Color(0xFF25A865);
 const Color kDarkBg        = Color(0xFF0D0D0D);
 const Color kCardBg        = Color(0xFF1A1A1A);
-const Color kSurfaceBg     = Color(0xFF242424);
 const Color kBorder        = Color(0xFF2E2E2E);
 const Color kTextPrimary   = Color(0xFFFFFFFF);
 const Color kTextSecondary = Color(0xFF9E9E9E);
 
-class ServiceCategory {
-  final String emoji;
-  final String label;
-  const ServiceCategory(this.emoji, this.label);
-}
-
 class HomeDashboard extends StatefulWidget {
   const HomeDashboard({super.key});
-
   @override
   State<HomeDashboard> createState() => _HomeDashboardState();
 }
 
-class _HomeDashboardState extends State<HomeDashboard>
-    with SingleTickerProviderStateMixin {
-  int _selectedCategory = 0;
+class _HomeDashboardState extends State<HomeDashboard> with SingleTickerProviderStateMixin {
+  int _selectedCategoryIndex = 0;
   late AnimationController _animCtrl;
   late Animation<double> _fadeAnim;
 
-  final List<ServiceCategory> _categories = const [
-    ServiceCategory('🔧', 'Plumbing'),
-    ServiceCategory('⚡', 'Electrical'),
-    ServiceCategory('❄️', 'AC Repair'),
-    ServiceCategory('🪟', 'Windows'),
-    ServiceCategory('🎨', 'Painting'),
-    ServiceCategory('🌿', 'Cleaning'),
+  final List<Map<String, String>> _categories = [
+    {'emoji': '🔧', 'label': 'Plumbing'},
+    {'emoji': '⚡', 'label': 'Electrical'},
+    {'emoji': '❄️', 'label': 'AC Repair'},
+    {'emoji': '🎨', 'label': 'Painting'},
   ];
-
-  // NOTE: THE DUMMY _WORKERS LIST IS GONE. 
-  // If you see a list named _workers here, delete it!
 
   @override
   void initState() {
     super.initState();
-    SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
-      statusBarColor: Colors.transparent,
-      statusBarIconBrightness: Brightness.light,
-    ));
-    _animCtrl = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 600),
-    );
+    _animCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 600));
     _fadeAnim = CurvedAnimation(parent: _animCtrl, curve: Curves.easeOut);
     _animCtrl.forward();
+  }
+
+  // ── CALLING LOGIC ──────────────────────────────────────────────────
+  Future<void> _makeCall(String? phoneNumber) async {
+    if (phoneNumber == null || phoneNumber.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Technician's number not available yet.")),
+      );
+      return;
+    }
+    final Uri launchUri = Uri(scheme: 'tel', path: phoneNumber);
+    if (await canLaunchUrl(launchUri)) {
+      await launchUrl(launchUri);
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Unable to open phone dialer.")),
+      );
+    }
   }
 
   @override
   void dispose() {
     _animCtrl.dispose();
     super.dispose();
-  }
-
-  String _getInitials(String name) {
-    List<String> names = name.trim().split(" ");
-    if (names.length >= 2) {
-      return "${names[0][0]}${names[1][0]}".toUpperCase();
-    }
-    return name.isNotEmpty ? name[0].toUpperCase() : "P";
   }
 
   @override
@@ -82,215 +72,80 @@ class _HomeDashboardState extends State<HomeDashboard>
       body: FadeTransition(
         opacity: _fadeAnim,
         child: CustomScrollView(
-          physics: const BouncingScrollPhysics(),
           slivers: [
             _buildAppBar(),
             SliverToBoxAdapter(child: _buildSearchBar()),
-            SliverToBoxAdapter(child: _buildBanner()),
             SliverToBoxAdapter(child: _buildSectionHeader('Services', 'See all')),
-            SliverToBoxAdapter(child: _buildCategories()),
-            SliverToBoxAdapter(child: _buildSectionHeader('Nearby Workers', 'View map',
-              onActionTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const MapScreen())),
-            )),
-            
-            // THIS IS THE DYNAMIC SECTION
-            SliverToBoxAdapter(
-              child: SizedBox(
-                height: 200,
-                child: StreamBuilder<QuerySnapshot>(
-                  // Ensure your collection is named 'workers' in Firebase
-                  stream: FirebaseFirestore.instance
-                      .collection('workers')
-                      .where('isAvailable', isEqualTo: true)
-                      .snapshots(),
-                  builder: (context, snapshot) {
-                    if (snapshot.hasError) {
-                      return Center(child: Text("Error: ${snapshot.error}", style: const TextStyle(color: Colors.red)));
-                    }
-                    if (snapshot.connectionState == ConnectionState.waiting) {
-                      return const Center(child: CircularProgressIndicator(color: kAccentGreen));
-                    }
-                    
-                    final docs = snapshot.data?.docs ?? [];
-                    
-                    if (docs.isEmpty) {
-                      return const Center(child: Text("No workers currently available", style: TextStyle(color: kTextSecondary)));
-                    }
-
-                    return ListView.builder(
-                      scrollDirection: Axis.horizontal,
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      itemCount: docs.length,
-                      itemBuilder: (context, i) {
-                        var data = docs[i].data() as Map<String, dynamic>;
-                        return _workerCard(
-                          docs[i].id,
-                          data['name'] ?? 'No Name',
-                          data['category'] ?? 'General',
-                          (data['rating'] ?? 0.0).toDouble(),
-                          _getInitials(data['name'] ?? 'P'),
-                        );
-                      },
-                    );
-                  },
-                ),
-              ),
-            ),
-
-            SliverToBoxAdapter(child: _buildRecentJobsHeader()),
-            SliverToBoxAdapter(child: _buildRecentJobs()),
+            SliverToBoxAdapter(child: _buildCategoryList()),
+            SliverToBoxAdapter(child: _buildSectionHeader('Active Bookings', 'History')),
+            SliverToBoxAdapter(child: _buildActiveJobsStream()), 
+            SliverToBoxAdapter(child: _buildSectionHeader('Nearby Workers', 'Map', 
+              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const MapScreen())))),
+            SliverToBoxAdapter(child: _buildWorkersStream()),
             const SliverToBoxAdapter(child: SizedBox(height: 100)),
           ],
         ),
       ),
-      bottomNavigationBar: _buildBottomNav(),
     );
   }
 
-  // ── Worker Card UI (STYLING PRESERVED) ───────────────────────────────────
-  Widget _workerCard(String id, String name, String trade, double rating, String initials) {
-    return GestureDetector(
-      onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (context) => BookingScreen(
-            workerId: id,
-            workerName: name,
-            workerTrade: trade,
-            workerRating: rating,
-            workerInitials: initials,
-            distance: "Nearby",
-          )),
-        );
-      },
-      child: Container(
-        width: 140,
-        margin: const EdgeInsets.only(right: 12),
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: kCardBg,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: kBorder),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Container(
-                  width: 44, height: 44,
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(colors: [kPrimaryGreen, kAccentGreen]),
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                  child: Center(child: Text(initials, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 14))),
-                ),
-                Container(width: 8, height: 8, decoration: const BoxDecoration(shape: BoxShape.circle, color: Color(0xFF4CAF50))),
-              ],
-            ),
-            const SizedBox(height: 10),
-            Text(name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: kTextPrimary, fontSize: 13, fontWeight: FontWeight.w700)),
-            Text(trade, style: const TextStyle(color: kTextSecondary, fontSize: 11)),
-            const Spacer(),
-            Row(
-              children: [
-                const Icon(Icons.star_rounded, color: Color(0xFFFFC107), size: 13),
-                const SizedBox(width: 3),
-                Text(rating.toString(), style: const TextStyle(color: kTextPrimary, fontSize: 12, fontWeight: FontWeight.w600)),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: 6),
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(colors: [kPrimaryGreen, kAccentGreen]),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: const Center(child: Text('Book', style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w700))),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // ── Rest of UI Components (STYLING PRESERVED) ───────────────────────────
   Widget _buildAppBar() {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
     return SliverAppBar(
-      backgroundColor: kDarkBg,
-      expandedHeight: 120, pinned: true, elevation: 0,
+      backgroundColor: kDarkBg, expandedHeight: 120, pinned: true,
       flexibleSpace: FlexibleSpaceBar(
-        background: Container(
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(colors: [Color(0xFF0F3D26), Color(0xFF1A7A4A), Color(0xFF0D2B1A)]),
-          ),
-          padding: const EdgeInsets.fromLTRB(20, 56, 20, 16),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              const Column(
-                mainAxisAlignment: MainAxisAlignment.end,
+        background: StreamBuilder<DocumentSnapshot>(
+          stream: FirebaseFirestore.instance.collection('users').doc(uid).snapshots(),
+          builder: (context, snapshot) {
+            String name = "User";
+            if (snapshot.hasData && snapshot.data!.exists) {
+              name = (snapshot.data!.data() as Map<String, dynamic>)['name']?.split(' ')[0] ?? "User";
+            }
+            return Container(
+              padding: const EdgeInsets.fromLTRB(20, 60, 20, 16),
+              decoration: const BoxDecoration(gradient: LinearGradient(colors: [Color(0xFF0F3D26), kPrimaryGreen])),
+              child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Nairobi, Kenya', style: TextStyle(color: Colors.white70, fontSize: 12)),
-                  Text('Good morning! 👋', style: TextStyle(color: kTextPrimary, fontSize: 20, fontWeight: FontWeight.w800)),
+                  const Text('Nairobi, Kenya 📍', style: TextStyle(color: Colors.white70, fontSize: 12)),
+                  Text('Hi, $name 👋', style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold)),
                 ],
               ),
-              _iconBtn(Icons.notifications_none_rounded, badge: true),
-            ],
-          ),
+            );
+          },
         ),
       ),
     );
-  }
-
-  Widget _iconBtn(IconData icon, {bool badge = false}) {
-    return Stack(children: [
-      Container(width: 38, height: 38, decoration: BoxDecoration(color: Colors.white12, borderRadius: BorderRadius.circular(12)), child: Icon(icon, color: Colors.white, size: 20)),
-      if (badge) Positioned(top: 6, right: 6, child: Container(width: 8, height: 8, decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle))),
-    ]);
   }
 
   Widget _buildSearchBar() {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+      padding: const EdgeInsets.all(16),
       child: Container(
-        decoration: BoxDecoration(color: kCardBg, borderRadius: BorderRadius.circular(16), border: Border.all(color: kBorder)),
         padding: const EdgeInsets.symmetric(horizontal: 16),
+        decoration: BoxDecoration(color: kCardBg, borderRadius: BorderRadius.circular(12), border: Border.all(color: kBorder)),
         child: const TextField(
-          style: TextStyle(color: kTextPrimary),
-          decoration: InputDecoration(hintText: 'Search services...', hintStyle: TextStyle(color: kTextSecondary), border: InputBorder.none),
+          style: TextStyle(color: Colors.white),
+          decoration: InputDecoration(hintText: "Search for a service...", hintStyle: TextStyle(color: Colors.grey), border: InputBorder.none, icon: Icon(Icons.search, color: kAccentGreen)),
         ),
       ),
     );
   }
 
-  Widget _buildBanner() {
-    return Container(
-      margin: const EdgeInsets.all(16),
-      height: 120,
-      decoration: BoxDecoration(gradient: const LinearGradient(colors: [kPrimaryGreen, kAccentGreen]), borderRadius: BorderRadius.circular(20)),
-      child: const Center(child: Text("20% OFF FIRST REPAIR", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold))),
-    );
-  }
-
-  Widget _buildSectionHeader(String title, String action, {VoidCallback? onActionTap}) {
+  Widget _buildSectionHeader(String title, String action, {VoidCallback? onTap}) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 20, 16, 10),
+      padding: const EdgeInsets.fromLTRB(16, 20, 16, 8),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(title, style: const TextStyle(color: kTextPrimary, fontSize: 18, fontWeight: FontWeight.bold)),
-          GestureDetector(onTap: onActionTap, child: Text(action, style: const TextStyle(color: kAccentGreen, fontSize: 13))),
+          Text(title, style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+          GestureDetector(onTap: onTap, child: Text(action, style: const TextStyle(color: kAccentGreen, fontSize: 12))),
         ],
       ),
     );
   }
 
-  Widget _buildCategories() {
+  Widget _buildCategoryList() {
     return SizedBox(
       height: 90,
       child: ListView.builder(
@@ -298,14 +153,19 @@ class _HomeDashboardState extends State<HomeDashboard>
         padding: const EdgeInsets.symmetric(horizontal: 16),
         itemCount: _categories.length,
         itemBuilder: (context, i) {
-          final isSelected = i == _selectedCategory;
+          bool selected = _selectedCategoryIndex == i;
           return GestureDetector(
-            onTap: () => setState(() => _selectedCategory = i),
+            onTap: () => setState(() => _selectedCategoryIndex = i),
             child: Container(
-              margin: const EdgeInsets.only(right: 10),
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              decoration: BoxDecoration(color: isSelected ? kPrimaryGreen : kCardBg, borderRadius: BorderRadius.circular(16)),
-              child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [Text(_categories[i].emoji, style: const TextStyle(fontSize: 22)), Text(_categories[i].label, style: const TextStyle(color: Colors.white, fontSize: 11))]),
+              width: 80, margin: const EdgeInsets.only(right: 12),
+              decoration: BoxDecoration(color: selected ? kPrimaryGreen : kCardBg, borderRadius: BorderRadius.circular(12), border: Border.all(color: selected ? kAccentGreen : kBorder)),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(_categories[i]['emoji']!, style: const TextStyle(fontSize: 24)),
+                  Text(_categories[i]['label']!, style: TextStyle(color: selected ? Colors.white : kTextSecondary, fontSize: 10)),
+                ],
+              ),
             ),
           );
         },
@@ -313,21 +173,128 @@ class _HomeDashboardState extends State<HomeDashboard>
     );
   }
 
-  Widget _buildRecentJobsHeader() => _buildSectionHeader('Recent Jobs', 'History');
-  Widget _buildRecentJobs() => const Padding(padding: EdgeInsets.all(16), child: Text("No history yet", style: TextStyle(color: kTextSecondary)));
+  Widget _buildActiveJobsStream() {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance.collection('jobs')
+          .where('userId', isEqualTo: uid)
+          .where('status', whereIn: ['pending', 'accepted'])
+          .snapshots(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+          return Container(
+            margin: const EdgeInsets.all(16), height: 60,
+            decoration: BoxDecoration(color: kCardBg, borderRadius: BorderRadius.circular(12), border: Border.all(color: kBorder, style: BorderStyle.solid)),
+            child: const Center(child: Text("No active bookings", style: TextStyle(color: kTextSecondary, fontSize: 12))),
+          );
+        }
+        return Column(
+          children: snapshot.data!.docs.map((doc) {
+            final data = doc.data() as Map<String, dynamic>;
+            bool isAccepted = data['status'] == 'accepted';
+            
+            return Container(
+              margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+              decoration: BoxDecoration(color: kCardBg, borderRadius: BorderRadius.circular(12), border: Border.all(color: kBorder)),
+              child: ListTile(
+                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => JobStatusScreen(jobId: doc.id))),
+                leading: Icon(Icons.circle, color: isAccepted ? kAccentGreen : Colors.amber, size: 12),
+                title: Text(data['category'] ?? 'Repair', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                subtitle: Text(isAccepted ? "Worker is on the way!" : "Waiting for worker...", style: TextStyle(color: isAccepted ? kAccentGreen : kTextSecondary, fontSize: 12)),
+                trailing: isAccepted 
+                  ? IconButton(
+                      icon: const Icon(Icons.phone, color: kAccentGreen),
+                      onPressed: () => _makeCall(data['workerPhone']), 
+                    )
+                  : const Icon(Icons.chevron_right, color: kTextSecondary),
+              ),
+            );
+          }).toList(),
+        );
+      },
+    );
+  }
 
-  Widget _buildBottomNav() {
-    return Container(
-      color: kCardBg,
-      padding: const EdgeInsets.symmetric(vertical: 10),
-      child: const Row(
-        mainAxisAlignment: MainAxisAlignment.spaceAround,
-        children: [
-          Icon(Icons.home_rounded, color: kAccentGreen),
-          Icon(Icons.search_rounded, color: kTextSecondary),
-          Icon(Icons.receipt_long_rounded, color: kTextSecondary),
-          Icon(Icons.person_rounded, color: kTextSecondary),
-        ],
+  Widget _buildWorkersStream() {
+    return SizedBox(
+      height: 160,
+      child: StreamBuilder<QuerySnapshot>(
+        stream: FirebaseFirestore.instance.collection('workers').snapshots(),
+        builder: (context, snapshot) {
+          if (!snapshot.hasData) return const Center(child: CircularProgressIndicator(color: kAccentGreen));
+          
+          final workerDocs = snapshot.data!.docs;
+
+          return ListView.builder(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            itemCount: workerDocs.length,
+            itemBuilder: (context, i) {
+              final doc = workerDocs[i];
+              final data = doc.data() as Map<String, dynamic>;
+              
+              return GestureDetector(
+                onTap: () {
+                  // ── PASSING ALL 4 DYNAMIC ARGUMENTS ────────────────────────
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => BookingScreen(
+                      workerId: doc.id,
+                      workerName: data['name'] ?? 'Worker',
+                      workerTrade: data['category'] ?? 'Technician',
+                      workerRating: (data['rating'] ?? 0.0).toDouble(),
+                      workerInitials: (data['name'] ?? 'W')[0].toUpperCase(),
+                      distance: data['distance'] ?? '-- km',
+                      ),
+                    ),
+                  );
+                },
+                child: Container(
+                  width: 130, 
+                  margin: const EdgeInsets.only(right: 12),
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: kCardBg, 
+                    borderRadius: BorderRadius.circular(12), 
+                    border: Border.all(color: kBorder)
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      CircleAvatar(
+                        backgroundColor: kAccentGreen, 
+                        radius: 20, 
+                        child: Text(data['name']?[0] ?? 'W', style: const TextStyle(color: Colors.white))
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        data['name'] ?? 'Worker', 
+                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13), 
+                        maxLines: 1, 
+                        overflow: TextOverflow.ellipsis
+                      ),
+                      Row(
+                        children: [
+                          const Icon(Icons.star, color: Colors.amber, size: 10),
+                          const SizedBox(width: 4),
+                          Text(
+                            (data['rating'] ?? 0.0).toString(),
+                            style: const TextStyle(color: kTextSecondary, fontSize: 10),
+                          ),
+                        ],
+                      ),
+                      Text(
+                        data['category'] ?? 'Technician', 
+                        style: TextStyle(color: kAccentGreen.withOpacity(0.8), fontSize: 11)
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          );
+        },
       ),
     );
   }

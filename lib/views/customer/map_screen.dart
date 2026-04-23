@@ -4,6 +4,8 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../booking/booking_screen.dart';
+import '../booking/job_status_screen.dart';
 
 // ─── Constants (matching your theme) ─────────────────────────────────────────
 const Color kPrimaryGreen  = Color(0xFF1A7A4A);
@@ -238,7 +240,7 @@ class _MapScreenState extends State<MapScreen> with TickerProviderStateMixin {
               initialZoom: 15.0,
               maxZoom: 19.0,
               minZoom: 5.0,
-              onTap: (_, _) => _deselectWorker(),
+              onTap: (_, __) => _deselectWorker(),
             ),
             children: [
               // Map tiles
@@ -710,7 +712,32 @@ class _MapScreenState extends State<MapScreen> with TickerProviderStateMixin {
               flex: 2,
               child: GestureDetector(
                 onTap: () {
-                  // TODO: Navigate to booking screen
+                  if (_selectedWorker == null) return;
+                  Navigator.push(
+                    context,
+                    PageRouteBuilder(
+                      pageBuilder: (_, animation, __) => BookingScreen(
+                        workerId:       _selectedWorker!.id,
+                        workerName:     _selectedWorker!.name,
+                        workerTrade:    _selectedWorker!.trade,
+                        workerRating:   _selectedWorker!.rating,
+                        workerInitials: _selectedWorker!.initials,
+                        distance:       _getDistance(_selectedWorker!),
+                      ),
+                      transitionsBuilder: (_, animation, __, child) =>
+                          SlideTransition(
+                            position: Tween<Offset>(
+                              begin: const Offset(0, 1),
+                              end: Offset.zero,
+                            ).animate(CurvedAnimation(
+                                parent: animation,
+                                curve: Curves.easeOut)),
+                            child: child,
+                          ),
+                      transitionDuration:
+                          const Duration(milliseconds: 400),
+                    ),
+                  );
                 },
                 child: Container(
                   height: 50,
@@ -765,6 +792,5 @@ class _MapScreenState extends State<MapScreen> with TickerProviderStateMixin {
           )),
       ]),
     );
-    
   }
 }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'job_status_screen.dart';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const Color kPrimaryGreen  = Color(0xFF1A7A4A);
@@ -47,15 +48,15 @@ class _BookingScreenState extends State<BookingScreen>
   final _budgetCtrl      = TextEditingController();
 
   // ── Selected values
-  String?   _selectedCategory;
-  DateTime? _selectedDate;
+  String?    _selectedCategory;
+  DateTime?  _selectedDate;
   TimeOfDay? _selectedTime;
 
   // ── Animation
   late AnimationController _animCtrl;
   late Animation<double>   _fadeAnim;
 
-  // ── Categories matching worker trade types
+  // ── Categories
   final List<Map<String, String>> _categories = [
     {'emoji': '🔧', 'label': 'Plumbing'},
     {'emoji': '⚡', 'label': 'Electrical'},
@@ -70,11 +71,11 @@ class _BookingScreenState extends State<BookingScreen>
   @override
   void initState() {
     super.initState();
-    // Pre-select category matching worker trade
     _selectedCategory = widget.workerTrade;
     _animCtrl = AnimationController(
         vsync: this, duration: const Duration(milliseconds: 500));
-    _fadeAnim = CurvedAnimation(parent: _animCtrl, curve: Curves.easeOut);
+    _fadeAnim =
+        CurvedAnimation(parent: _animCtrl, curve: Curves.easeOut);
     _animCtrl.forward();
   }
 
@@ -87,7 +88,7 @@ class _BookingScreenState extends State<BookingScreen>
     super.dispose();
   }
 
-  // ── Pick date ──────────────────────────────────────────────────────────────
+  // ── Pickers ────────────────────────────────────────────────────────────────
   Future<void> _pickDate() async {
     final picked = await showDatePicker(
       context: context,
@@ -97,9 +98,7 @@ class _BookingScreenState extends State<BookingScreen>
       builder: (context, child) => Theme(
         data: ThemeData.dark().copyWith(
           colorScheme: const ColorScheme.dark(
-            primary: kAccentGreen,
-            surface: kCardBg,
-          ),
+              primary: kAccentGreen, surface: kCardBg),
         ),
         child: child!,
       ),
@@ -107,7 +106,6 @@ class _BookingScreenState extends State<BookingScreen>
     if (picked != null) setState(() => _selectedDate = picked);
   }
 
-  // ── Pick time ──────────────────────────────────────────────────────────────
   Future<void> _pickTime() async {
     final picked = await showTimePicker(
       context: context,
@@ -115,9 +113,7 @@ class _BookingScreenState extends State<BookingScreen>
       builder: (context, child) => Theme(
         data: ThemeData.dark().copyWith(
           colorScheme: const ColorScheme.dark(
-            primary: kAccentGreen,
-            surface: kCardBg,
-          ),
+              primary: kAccentGreen, surface: kCardBg),
         ),
         child: child!,
       ),
@@ -125,7 +121,6 @@ class _BookingScreenState extends State<BookingScreen>
     if (picked != null) setState(() => _selectedTime = picked);
   }
 
-  // ── Format date ────────────────────────────────────────────────────────────
   String get _formattedDate {
     if (_selectedDate == null) return 'Select date';
     return '${_selectedDate!.day}/${_selectedDate!.month}/${_selectedDate!.year}';
@@ -138,11 +133,12 @@ class _BookingScreenState extends State<BookingScreen>
     return '$h:$m';
   }
 
-  // ── Validate step ──────────────────────────────────────────────────────────
+  // ── Validation ─────────────────────────────────────────────────────────────
   bool _validateStep() {
     if (_currentStep == 0) {
       if (_selectedCategory == null) {
-        setState(() => _errorMessage = 'Please select a service category.');
+        setState(
+            () => _errorMessage = 'Please select a service category.');
         return false;
       }
       if (_descriptionCtrl.text.trim().isEmpty) {
@@ -160,7 +156,8 @@ class _BookingScreenState extends State<BookingScreen>
         return false;
       }
       if (_locationCtrl.text.trim().isEmpty) {
-        setState(() => _errorMessage = 'Please enter your location.');
+        setState(
+            () => _errorMessage = 'Please enter your location.');
         return false;
       }
     }
@@ -168,155 +165,176 @@ class _BookingScreenState extends State<BookingScreen>
     return true;
   }
 
-  // ── Next step ──────────────────────────────────────────────────────────────
   void _nextStep() {
     if (!_validateStep()) return;
     setState(() => _currentStep++);
   }
 
-  // ── Submit booking to Firestore ────────────────────────────────────────────
+  // ── Submit booking ─────────────────────────────────────────────────────────
   Future<void> _submitBooking() async {
-  if (!_validateStep()) return;
-  setState(() { _isSubmitting = true; _errorMessage = null; });
-
-  try {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) throw Exception('Not logged in');
-
-    // Create job document in Firestore
-    final jobRef = await FirebaseFirestore.instance
-        .collection('jobs')
-        .add({
-      'workerId':     widget.workerId,      // The Professional's ID
-      'customerId':   user.uid,             // renamed from userId to be clearer
-      'customerName': user.displayName ?? 'Client', 
-      'serviceType':  _selectedCategory,    // renamed to match dashboard expectation
-      'description':  _descriptionCtrl.text.trim(),
-      'location':     _locationCtrl.text.trim(),
-      'scheduledDate': _formattedDate,
-      'scheduledTime': _formattedTime,
-      'budget':       _budgetCtrl.text.trim().isEmpty
-          ? 'Negotiable'
-          : 'KES ${_budgetCtrl.text.trim()}',
-      'status':       'pending',            // MUST BE LOWERCASE
-      'timestamp':    FieldValue.serverTimestamp(), // USE THIS for ordering/sorting!
-      'createdAt':    DateTime.now().toIso8601String(),
+    if (!_validateStep()) return;
+    setState(() {
+      _isSubmitting = true;
+      _errorMessage = null;
     });
 
-    if (mounted) {
-      _showSuccessSheet(jobRef.id);
-    }
-  } catch (e) {
-    debugPrint("Booking Error: $e"); // Helpful for your terminal
-    setState(() => _errorMessage = 'Failed to submit booking.');
-  } finally {
-    if (mounted) setState(() => _isSubmitting = false);
-  }
-}
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) throw Exception('Not logged in');
 
-  // ── Success bottom sheet ───────────────────────────────────────────────────
+      // Fetch customer phone from users collection
+      final userDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .get();
+
+      final customerPhone =
+          userDoc.data()?['phone']?.toString() ?? '';
+
+      final jobRef =
+          await FirebaseFirestore.instance.collection('jobs').add({
+        'userId':        user.uid,
+        'name':          user.displayName ??
+            userDoc.data()?['name'] ??
+            'User',
+        'customerPhone': customerPhone,
+        'workerId':      widget.workerId,
+        'workerName':    widget.workerName,
+        'category':      _selectedCategory,
+        'description':   _descriptionCtrl.text.trim(),
+        'location':      _locationCtrl.text.trim(),
+        'date':          _formattedDate,
+        'time':          _formattedTime,
+        'budget':        _budgetCtrl.text.trim().isEmpty
+            ? 'Negotiable'
+            : 'KES ${_budgetCtrl.text.trim()}',
+        'status':            'pending',
+        'amount':            0,
+        'paymentRequested':  false,
+        'createdAt':         DateTime.now().toIso8601String(),
+      });
+
+      if (mounted) _showSuccessSheet(jobRef.id);
+    } catch (e) {
+      setState(() =>
+          _errorMessage = 'Failed to submit booking. Please try again.');
+    } finally {
+      if (mounted) setState(() => _isSubmitting = false);
+    }
+  }
+
+  // ── Success sheet ──────────────────────────────────────────────────────────
   void _showSuccessSheet(String jobId) {
     showModalBottomSheet(
       context: context,
       isDismissible: false,
       backgroundColor: kCardBg,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-      ),
+          borderRadius:
+              BorderRadius.vertical(top: Radius.circular(28))),
       builder: (_) => Padding(
         padding: const EdgeInsets.fromLTRB(24, 20, 24, 40),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Handle
             Container(
-              width: 36, height: 4,
-              decoration: BoxDecoration(
-                color: kBorder, borderRadius: BorderRadius.circular(2)),
-            ),
+                width: 36,
+                height: 4,
+                decoration: BoxDecoration(
+                    color: kBorder,
+                    borderRadius: BorderRadius.circular(2))),
             const SizedBox(height: 24),
-
-            // Success icon
             Container(
-              width: 72, height: 72,
+              width: 72,
+              height: 72,
               decoration: BoxDecoration(
                 gradient: const LinearGradient(
-                  colors: [kPrimaryGreen, kAccentGreen],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
+                    colors: [kPrimaryGreen, kAccentGreen],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight),
                 shape: BoxShape.circle,
-                boxShadow: [BoxShadow(
-                  color: kPrimaryGreen.withOpacity(0.4),
-                  blurRadius: 20, offset: const Offset(0, 8))],
+                boxShadow: [
+                  BoxShadow(
+                      color: kPrimaryGreen.withOpacity(0.4),
+                      blurRadius: 20,
+                      offset: const Offset(0, 8))
+                ],
               ),
               child: const Center(
-                child: Text('✅', style: TextStyle(fontSize: 32)),
-              ),
+                  child:
+                      Text('✅', style: TextStyle(fontSize: 32))),
             ),
             const SizedBox(height: 20),
-
             const Text('Booking Submitted!',
-              style: TextStyle(color: kTextPrimary,
-                fontSize: 22, fontWeight: FontWeight.w800,
-                letterSpacing: -0.5)),
+                style: TextStyle(
+                    color: kTextPrimary,
+                    fontSize: 22,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: -0.5)),
             const SizedBox(height: 8),
             Text(
               'Your request has been sent to ${widget.workerName}.\nWaiting for them to accept.',
               textAlign: TextAlign.center,
-              style: const TextStyle(color: kTextSecondary,
-                  fontSize: 14, height: 1.5)),
-
+              style: const TextStyle(
+                  color: kTextSecondary, fontSize: 14, height: 1.5),
+            ),
             const SizedBox(height: 20),
-
-            // Job ID
             Container(
               padding: const EdgeInsets.symmetric(
                   horizontal: 16, vertical: 10),
               decoration: BoxDecoration(
-                color: kSurfaceBg,
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: kBorder),
-              ),
+                  color: kSurfaceBg,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: kBorder)),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   const Text('Job ID: ',
-                    style: TextStyle(color: kTextSecondary, fontSize: 13)),
+                      style: TextStyle(
+                          color: kTextSecondary, fontSize: 13)),
                   Text(jobId.substring(0, 8).toUpperCase(),
-                    style: const TextStyle(color: kAccentGreen,
-                      fontSize: 13, fontWeight: FontWeight.w700,
-                      letterSpacing: 1)),
+                      style: const TextStyle(
+                          color: kAccentGreen,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 1)),
                 ],
               ),
             ),
-
             const SizedBox(height: 28),
-
-            // Done button
             GestureDetector(
               onTap: () {
-                Navigator.pop(context); // close sheet
-                Navigator.pop(context); // go back to home
+                Navigator.pop(context);
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                      builder: (_) =>
+                          JobStatusScreen(jobId: jobId)),
+                );
               },
               child: Container(
-                width: double.infinity, height: 54,
+                width: double.infinity,
+                height: 54,
                 decoration: BoxDecoration(
                   gradient: const LinearGradient(
-                    colors: [kPrimaryGreen, kAccentGreen],
-                    begin: Alignment.centerLeft,
-                    end: Alignment.centerRight,
-                  ),
+                      colors: [kPrimaryGreen, kAccentGreen],
+                      begin: Alignment.centerLeft,
+                      end: Alignment.centerRight),
                   borderRadius: BorderRadius.circular(16),
-                  boxShadow: [BoxShadow(
-                    color: kPrimaryGreen.withOpacity(0.4),
-                    blurRadius: 16, offset: const Offset(0, 6))],
+                  boxShadow: [
+                    BoxShadow(
+                        color: kPrimaryGreen.withOpacity(0.4),
+                        blurRadius: 16,
+                        offset: const Offset(0, 6))
+                  ],
                 ),
                 child: const Center(
-                  child: Text('Back to Home',
-                    style: TextStyle(color: Colors.white,
-                      fontSize: 16, fontWeight: FontWeight.w700)),
-                ),
+                    child: Text('Track Your Job 📍',
+                        style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700))),
               ),
             ),
           ],
@@ -325,6 +343,7 @@ class _BookingScreenState extends State<BookingScreen>
     );
   }
 
+  // ── Build ──────────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -333,7 +352,7 @@ class _BookingScreenState extends State<BookingScreen>
         opacity: _fadeAnim,
         child: Column(
           children: [
-            // ── Header
+            // Header
             Container(
               decoration: const BoxDecoration(
                 gradient: LinearGradient(
@@ -351,49 +370,59 @@ class _BookingScreenState extends State<BookingScreen>
                   padding: const EdgeInsets.fromLTRB(16, 12, 16, 20),
                   child: Column(
                     children: [
-                      // Back + title
                       Row(children: [
                         GestureDetector(
                           onTap: () => Navigator.pop(context),
                           child: Container(
-                            width: 40, height: 40,
+                            width: 40,
+                            height: 40,
                             decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(0.12),
-                              borderRadius: BorderRadius.circular(12),
+                              color:
+                                  Colors.white.withOpacity(0.12),
+                              borderRadius:
+                                  BorderRadius.circular(12),
                             ),
-                            child: const Icon(Icons.arrow_back_rounded,
-                                color: Colors.white, size: 20),
+                            child: const Icon(
+                                Icons.arrow_back_rounded,
+                                color: Colors.white,
+                                size: 20),
                           ),
                         ),
                         const SizedBox(width: 14),
                         const Expanded(
                           child: Text('Book a Service',
-                            style: TextStyle(color: Colors.white,
-                              fontSize: 18, fontWeight: FontWeight.w800,
-                              letterSpacing: -0.3)),
+                              style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w800,
+                                  letterSpacing: -0.3)),
                         ),
-                        // Step indicator
                         Row(
-                          children: List.generate(3, (i) =>
-                            AnimatedContainer(
-                              duration: const Duration(milliseconds: 300),
-                              margin: const EdgeInsets.only(left: 5),
-                              width: i == _currentStep ? 20 : 8,
-                              height: 8,
-                              decoration: BoxDecoration(
-                                color: i == _currentStep
-                                    ? Colors.white
-                                    : i < _currentStep
-                                        ? kAccentGreen
-                                        : Colors.white.withOpacity(0.3),
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                            )),
+                          children: List.generate(
+                              3,
+                              (i) => AnimatedContainer(
+                                    duration: const Duration(
+                                        milliseconds: 300),
+                                    margin: const EdgeInsets.only(
+                                        left: 5),
+                                    width: i == _currentStep
+                                        ? 20
+                                        : 8,
+                                    height: 8,
+                                    decoration: BoxDecoration(
+                                      color: i == _currentStep
+                                          ? Colors.white
+                                          : i < _currentStep
+                                              ? kAccentGreen
+                                              : Colors.white
+                                                  .withOpacity(0.3),
+                                      borderRadius:
+                                          BorderRadius.circular(4),
+                                    ),
+                                  )),
                         ),
                       ]),
-
                       const SizedBox(height: 16),
-
                       // Worker info card
                       Container(
                         padding: const EdgeInsets.all(14),
@@ -401,74 +430,78 @@ class _BookingScreenState extends State<BookingScreen>
                           color: Colors.white.withOpacity(0.1),
                           borderRadius: BorderRadius.circular(16),
                           border: Border.all(
-                              color: Colors.white.withOpacity(0.15)),
+                              color:
+                                  Colors.white.withOpacity(0.15)),
                         ),
                         child: Row(children: [
                           Container(
-                            width: 46, height: 46,
+                            width: 46,
+                            height: 46,
                             decoration: BoxDecoration(
-                              color: kAccentGreen,
-                              borderRadius: BorderRadius.circular(14),
-                            ),
-                            child: Center(child: Text(
-                              widget.workerInitials,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.w800,
-                                fontSize: 16,
-                              ))),
+                                color: kAccentGreen,
+                                borderRadius:
+                                    BorderRadius.circular(14)),
+                            child: Center(
+                                child: Text(widget.workerInitials,
+                                    style: const TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.w800,
+                                        fontSize: 16))),
                           ),
                           const SizedBox(width: 12),
-                          Expanded(child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(widget.workerName,
+                          Expanded(
+                              child: Column(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.start,
+                                  children: [
+                            Text(widget.workerName,
                                 style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.w700,
-                                )),
-                              Row(children: [
-                                Container(
-                                  margin: const EdgeInsets.only(top: 3),
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 7, vertical: 2),
-                                  decoration: BoxDecoration(
-                                    color: kAccentGreen.withOpacity(0.25),
-                                    borderRadius: BorderRadius.circular(5),
-                                  ),
-                                  child: Text(widget.workerTrade,
+                                    color: Colors.white,
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w700)),
+                            Row(children: [
+                              Container(
+                                margin:
+                                    const EdgeInsets.only(top: 3),
+                                padding:
+                                    const EdgeInsets.symmetric(
+                                        horizontal: 7, vertical: 2),
+                                decoration: BoxDecoration(
+                                    color: kAccentGreen
+                                        .withOpacity(0.25),
+                                    borderRadius:
+                                        BorderRadius.circular(5)),
+                                child: Text(widget.workerTrade,
                                     style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.w600,
-                                    )),
-                                ),
-                                const SizedBox(width: 8),
-                                const Icon(Icons.star_rounded,
-                                    color: Color(0xFFFFC107), size: 12),
-                                Text(' ${widget.workerRating}',
+                                        color: Colors.white,
+                                        fontSize: 10,
+                                        fontWeight:
+                                            FontWeight.w600)),
+                              ),
+                              const SizedBox(width: 8),
+                              const Icon(Icons.star_rounded,
+                                  color: Color(0xFFFFC107),
+                                  size: 12),
+                              Text(' ${widget.workerRating}',
                                   style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 12,
+                                      fontWeight:
+                                          FontWeight.w600)),
+                            ]),
+                          ])),
+                          Column(
+                              crossAxisAlignment:
+                                  CrossAxisAlignment.end,
+                              children: [
+                            const Icon(Icons.location_on_rounded,
+                                color: kAccentGreen, size: 14),
+                            Text(widget.distance,
+                                style: const TextStyle(
                                     color: Colors.white,
                                     fontSize: 12,
-                                    fontWeight: FontWeight.w600,
-                                  )),
-                              ]),
-                            ],
-                          )),
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.end,
-                            children: [
-                              const Icon(Icons.location_on_rounded,
-                                  color: kAccentGreen, size: 14),
-                              Text(widget.distance,
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
-                                )),
-                            ],
-                          ),
+                                    fontWeight: FontWeight.w600)),
+                          ]),
                         ]),
                       ),
                     ],
@@ -477,7 +510,7 @@ class _BookingScreenState extends State<BookingScreen>
               ),
             ),
 
-            // ── Form content
+            // Form content
             Expanded(
               child: SingleChildScrollView(
                 physics: const BouncingScrollPhysics(),
@@ -502,12 +535,11 @@ class _BookingScreenState extends State<BookingScreen>
       children: [
         _sectionTitle('Service Category', '1/3'),
         const SizedBox(height: 12),
-
-        // Category grid
         GridView.builder(
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          gridDelegate:
+              const SliverGridDelegateWithFixedCrossAxisCount(
             crossAxisCount: 4,
             mainAxisSpacing: 10,
             crossAxisSpacing: 10,
@@ -526,13 +558,18 @@ class _BookingScreenState extends State<BookingScreen>
                   color: isSelected ? kPrimaryGreen : kCardBg,
                   borderRadius: BorderRadius.circular(14),
                   border: Border.all(
-                    color: isSelected ? kAccentGreen : kBorder,
-                    width: isSelected ? 1.5 : 1,
-                  ),
-                  boxShadow: isSelected ? [BoxShadow(
-                    color: kPrimaryGreen.withOpacity(0.3),
-                    blurRadius: 10, offset: const Offset(0, 4),
-                  )] : [],
+                      color:
+                          isSelected ? kAccentGreen : kBorder,
+                      width: isSelected ? 1.5 : 1),
+                  boxShadow: isSelected
+                      ? [
+                          BoxShadow(
+                              color:
+                                  kPrimaryGreen.withOpacity(0.3),
+                              blurRadius: 10,
+                              offset: const Offset(0, 4))
+                        ]
+                      : [],
                 ),
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
@@ -541,36 +578,32 @@ class _BookingScreenState extends State<BookingScreen>
                         style: const TextStyle(fontSize: 20)),
                     const SizedBox(height: 4),
                     Text(cat['label']!,
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: isSelected
-                            ? Colors.white
-                            : kTextSecondary,
-                        fontSize: 10,
-                        fontWeight: FontWeight.w600,
-                      )),
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                            color: isSelected
+                                ? Colors.white
+                                : kTextSecondary,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w600)),
                   ],
                 ),
               ),
             );
           },
         ),
-
         const SizedBox(height: 20),
         _sectionTitle('Describe the Job', ''),
         const SizedBox(height: 8),
-
         Container(
           decoration: BoxDecoration(
-            color: kCardBg,
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: kBorder),
-          ),
+              color: kCardBg,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: kBorder)),
           child: TextField(
             controller: _descriptionCtrl,
             maxLines: 4,
-            style: const TextStyle(color: kTextPrimary,
-                fontSize: 14, height: 1.5),
+            style: const TextStyle(
+                color: kTextPrimary, fontSize: 14, height: 1.5),
             decoration: const InputDecoration(
               hintText:
                   'e.g. My kitchen sink is leaking under the cabinet. Need urgent fix...',
@@ -581,35 +614,33 @@ class _BookingScreenState extends State<BookingScreen>
             ),
           ),
         ),
-
         const SizedBox(height: 20),
         _sectionTitle('Estimated Budget (Optional)', ''),
         const SizedBox(height: 8),
-
         Container(
           decoration: BoxDecoration(
-            color: kCardBg,
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: kBorder),
-          ),
+              color: kCardBg,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: kBorder)),
           child: Row(children: [
             Container(
               padding: const EdgeInsets.symmetric(
                   horizontal: 14, vertical: 16),
               decoration: const BoxDecoration(
-                border: Border(
-                    right: BorderSide(color: kBorder, width: 1)),
-              ),
+                  border: Border(
+                      right: BorderSide(color: kBorder, width: 1))),
               child: const Text('KES',
-                style: TextStyle(color: kTextSecondary,
-                  fontSize: 14, fontWeight: FontWeight.w600)),
+                  style: TextStyle(
+                      color: kTextSecondary,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600)),
             ),
             Expanded(
               child: TextField(
                 controller: _budgetCtrl,
                 keyboardType: TextInputType.number,
-                style: const TextStyle(color: kTextPrimary,
-                    fontSize: 14),
+                style: const TextStyle(
+                    color: kTextPrimary, fontSize: 14),
                 decoration: const InputDecoration(
                   hintText: 'e.g. 1500',
                   hintStyle: TextStyle(
@@ -622,12 +653,10 @@ class _BookingScreenState extends State<BookingScreen>
             ),
           ]),
         ),
-
         if (_errorMessage != null) ...[
           const SizedBox(height: 14),
           _errorBanner(_errorMessage!),
         ],
-
         const SizedBox(height: 24),
         _nextButton('Continue', _nextStep),
       ],
@@ -641,39 +670,33 @@ class _BookingScreenState extends State<BookingScreen>
       children: [
         _sectionTitle('When do you need this done?', '2/3'),
         const SizedBox(height: 16),
-
-        // Date & time row
         Row(children: [
           Expanded(child: _pickerCard(
-            icon: Icons.calendar_today_rounded,
-            label: 'Date',
-            value: _formattedDate,
-            onTap: _pickDate,
-            isSet: _selectedDate != null,
-          )),
+              icon: Icons.calendar_today_rounded,
+              label: 'Date',
+              value: _formattedDate,
+              onTap: _pickDate,
+              isSet: _selectedDate != null)),
           const SizedBox(width: 12),
           Expanded(child: _pickerCard(
-            icon: Icons.access_time_rounded,
-            label: 'Time',
-            value: _formattedTime,
-            onTap: _pickTime,
-            isSet: _selectedTime != null,
-          )),
+              icon: Icons.access_time_rounded,
+              label: 'Time',
+              value: _formattedTime,
+              onTap: _pickTime,
+              isSet: _selectedTime != null)),
         ]),
-
         const SizedBox(height: 20),
         _sectionTitle('Your Location', ''),
         const SizedBox(height: 8),
-
         Container(
           decoration: BoxDecoration(
-            color: kCardBg,
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: kBorder),
-          ),
+              color: kCardBg,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: kBorder)),
           child: TextField(
             controller: _locationCtrl,
-            style: const TextStyle(color: kTextPrimary, fontSize: 14),
+            style: const TextStyle(
+                color: kTextPrimary, fontSize: 14),
             decoration: const InputDecoration(
               hintText: 'e.g. House 12, Westlands, Nairobi',
               hintStyle: TextStyle(
@@ -686,58 +709,57 @@ class _BookingScreenState extends State<BookingScreen>
             ),
           ),
         ),
-
         const SizedBox(height: 16),
-
-        // Quick location chips
         const Text('Quick select:',
-          style: TextStyle(color: kTextSecondary,
-              fontSize: 12, fontWeight: FontWeight.w500)),
+            style: TextStyle(
+                color: kTextSecondary,
+                fontSize: 12,
+                fontWeight: FontWeight.w500)),
         const SizedBox(height: 8),
         Wrap(
-          spacing: 8, runSpacing: 8,
+          spacing: 8,
+          runSpacing: 8,
           children: [
             'Westlands', 'Kilimani', 'Karen',
             'Eastleigh', 'Parklands', 'CBD'
-          ].map((area) => GestureDetector(
-            onTap: () => setState(() =>
-                _locationCtrl.text = '$area, Nairobi'),
-            child: Container(
-              padding: const EdgeInsets.symmetric(
-                  horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                color: kSurfaceBg,
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: kBorder),
-              ),
-              child: Text(area,
-                style: const TextStyle(
-                  color: kTextSecondary,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w500,
-                )),
-            ),
-          )).toList(),
+          ]
+              .map((area) => GestureDetector(
+                    onTap: () => setState(
+                        () => _locationCtrl.text = '$area, Nairobi'),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                          color: kSurfaceBg,
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: kBorder)),
+                      child: Text(area,
+                          style: const TextStyle(
+                              color: kTextSecondary,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500)),
+                    ),
+                  ))
+              .toList(),
         ),
-
         if (_errorMessage != null) ...[
           const SizedBox(height: 14),
           _errorBanner(_errorMessage!),
         ],
-
         const SizedBox(height: 24),
         Row(children: [
-          Expanded(child: _outlineButton('Back',
-              () => setState(() => _currentStep--))),
+          Expanded(
+              child: _outlineButton(
+                  'Back', () => setState(() => _currentStep--))),
           const SizedBox(width: 12),
-          Expanded(flex: 2,
-              child: _nextButton('Continue', _nextStep)),
+          Expanded(
+              flex: 2, child: _nextButton('Continue', _nextStep)),
         ]),
       ],
     );
   }
 
-  // ── Step 3: Review & confirm ───────────────────────────────────────────────
+  // ── Step 3: Review & confirm (NO escrow info) ──────────────────────────────
   Widget _buildStep3() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -748,19 +770,19 @@ class _BookingScreenState extends State<BookingScreen>
         // Summary card
         Container(
           decoration: BoxDecoration(
-            color: kCardBg,
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: kBorder),
-          ),
+              color: kCardBg,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: kBorder)),
           child: Column(children: [
-            // Worker
             _reviewRow('👷', 'Worker',
                 '${widget.workerName} (${widget.workerTrade})'),
             _divider(),
-            _reviewRow('🔧', 'Service',
-                _selectedCategory ?? '—'),
+            _reviewRow(
+                '🔧', 'Service', _selectedCategory ?? '—'),
             _divider(),
-            _reviewRow('📝', 'Description',
+            _reviewRow(
+                '📝',
+                'Description',
                 _descriptionCtrl.text.trim().isEmpty
                     ? '—'
                     : _descriptionCtrl.text.trim()),
@@ -768,39 +790,26 @@ class _BookingScreenState extends State<BookingScreen>
             _reviewRow('📅', 'Date & Time',
                 '$_formattedDate at $_formattedTime'),
             _divider(),
-            _reviewRow('📍', 'Location',
+            _reviewRow(
+                '📍',
+                'Location',
                 _locationCtrl.text.trim().isEmpty
                     ? '—'
                     : _locationCtrl.text.trim()),
             _divider(),
-            _reviewRow('💰', 'Budget',
+            _reviewRow(
+                '💰',
+                'Budget',
                 _budgetCtrl.text.trim().isEmpty
                     ? 'Negotiable'
                     : 'KES ${_budgetCtrl.text.trim()}'),
           ]),
         ),
 
-        const SizedBox(height: 16),
-
-        // Info notice
-        Container(
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            color: kAccentGreen.withOpacity(0.08),
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(
-                color: kAccentGreen.withOpacity(0.2)),
-          ),
-          child: Row(children: [
-            const Text('ℹ️', style: TextStyle(fontSize: 16)),
-            const SizedBox(width: 10),
-            const Expanded(child: Text(
-              'Payment is held in escrow and only released to the worker after you confirm the job is completed.',
-              style: TextStyle(color: kTextSecondary,
-                  fontSize: 12, height: 1.5),
-            )),
-          ]),
-        ),
+        // ── NOTE: escrow notice intentionally removed ──────────────
+        // Payment is now handled directly via M-Pesa STK Push
+        // triggered by the worker after job completion.
+        // ──────────────────────────────────────────────────────────
 
         if (_errorMessage != null) ...[
           const SizedBox(height: 14),
@@ -809,10 +818,12 @@ class _BookingScreenState extends State<BookingScreen>
 
         const SizedBox(height: 24),
         Row(children: [
-          Expanded(child: _outlineButton('Back',
-              () => setState(() => _currentStep--))),
+          Expanded(
+              child: _outlineButton(
+                  'Back', () => setState(() => _currentStep--))),
           const SizedBox(width: 12),
-          Expanded(flex: 2,
+          Expanded(
+              flex: 2,
               child: _nextButton(
                   'Confirm Booking', _submitBooking,
                   loading: _isSubmitting)),
@@ -827,13 +838,16 @@ class _BookingScreenState extends State<BookingScreen>
   Widget _sectionTitle(String title, String step) {
     return Row(children: [
       Text(title,
-        style: const TextStyle(color: kTextPrimary,
-          fontSize: 16, fontWeight: FontWeight.w800,
-          letterSpacing: -0.3)),
+          style: const TextStyle(
+              color: kTextPrimary,
+              fontSize: 16,
+              fontWeight: FontWeight.w800,
+              letterSpacing: -0.3)),
       const Spacer(),
       if (step.isNotEmpty)
-        Text(step, style: const TextStyle(
-            color: kTextSecondary, fontSize: 13)),
+        Text(step,
+            style: const TextStyle(
+                color: kTextSecondary, fontSize: 13)),
     ]);
   }
 
@@ -850,11 +864,13 @@ class _BookingScreenState extends State<BookingScreen>
         duration: const Duration(milliseconds: 200),
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: isSet ? kPrimaryGreen.withOpacity(0.1) : kCardBg,
+          color:
+              isSet ? kPrimaryGreen.withOpacity(0.1) : kCardBg,
           borderRadius: BorderRadius.circular(14),
           border: Border.all(
-            color: isSet ? kAccentGreen.withOpacity(0.5) : kBorder,
-          ),
+              color: isSet
+                  ? kAccentGreen.withOpacity(0.5)
+                  : kBorder),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -864,24 +880,25 @@ class _BookingScreenState extends State<BookingScreen>
                 size: 20),
             const SizedBox(height: 8),
             Text(label,
-              style: const TextStyle(
-                  color: kTextSecondary, fontSize: 11)),
+                style: const TextStyle(
+                    color: kTextSecondary, fontSize: 11)),
             const SizedBox(height: 2),
             Text(value,
-              style: TextStyle(
-                color: isSet ? kTextPrimary : kTextSecondary,
-                fontSize: 13,
-                fontWeight: isSet
-                    ? FontWeight.w700
-                    : FontWeight.w400,
-              )),
+                style: TextStyle(
+                    color:
+                        isSet ? kTextPrimary : kTextSecondary,
+                    fontSize: 13,
+                    fontWeight: isSet
+                        ? FontWeight.w700
+                        : FontWeight.w400)),
           ],
         ),
       ),
     );
   }
 
-  Widget _reviewRow(String emoji, String label, String value) {
+  Widget _reviewRow(
+      String emoji, String label, String value) {
     return Padding(
       padding: const EdgeInsets.symmetric(
           horizontal: 16, vertical: 14),
@@ -890,17 +907,20 @@ class _BookingScreenState extends State<BookingScreen>
         children: [
           Text(emoji, style: const TextStyle(fontSize: 16)),
           const SizedBox(width: 12),
-          Column(crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
+          Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
             Text(label,
-              style: const TextStyle(
-                  color: kTextSecondary, fontSize: 12)),
+                style: const TextStyle(
+                    color: kTextSecondary, fontSize: 12)),
             const SizedBox(height: 2),
             SizedBox(
               width: MediaQuery.of(context).size.width - 120,
               child: Text(value,
-                style: const TextStyle(color: kTextPrimary,
-                  fontSize: 14, fontWeight: FontWeight.w600)),
+                  style: const TextStyle(
+                      color: kTextPrimary,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600)),
             ),
           ]),
         ],
@@ -908,9 +928,10 @@ class _BookingScreenState extends State<BookingScreen>
     );
   }
 
-  Widget _divider() =>
-      Container(height: 1, color: kBorder,
-          margin: const EdgeInsets.symmetric(horizontal: 16));
+  Widget _divider() => Container(
+      height: 1,
+      color: kBorder,
+      margin: const EdgeInsets.symmetric(horizontal: 16));
 
   Widget _errorBanner(String msg) {
     return Container(
@@ -927,9 +948,12 @@ class _BookingScreenState extends State<BookingScreen>
         const Icon(Icons.error_outline_rounded,
             color: Color(0xFFFF6B6B), size: 16),
         const SizedBox(width: 8),
-        Expanded(child: Text(msg,
-          style: const TextStyle(color: Color(0xFFFF6B6B),
-            fontSize: 13, fontWeight: FontWeight.w500))),
+        Expanded(
+            child: Text(msg,
+                style: const TextStyle(
+                    color: Color(0xFFFF6B6B),
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500))),
       ]),
     );
   }
@@ -942,22 +966,29 @@ class _BookingScreenState extends State<BookingScreen>
         height: 54,
         decoration: BoxDecoration(
           gradient: const LinearGradient(
-            colors: [kPrimaryGreen, kAccentGreen],
-            begin: Alignment.centerLeft,
-            end: Alignment.centerRight,
-          ),
+              colors: [kPrimaryGreen, kAccentGreen],
+              begin: Alignment.centerLeft,
+              end: Alignment.centerRight),
           borderRadius: BorderRadius.circular(14),
-          boxShadow: [BoxShadow(
-            color: kPrimaryGreen.withOpacity(0.4),
-            blurRadius: 16, offset: const Offset(0, 6))],
+          boxShadow: [
+            BoxShadow(
+                color: kPrimaryGreen.withOpacity(0.4),
+                blurRadius: 16,
+                offset: const Offset(0, 6))
+          ],
         ),
-        child: Center(child: loading
-            ? const SizedBox(width: 20, height: 20,
-                child: CircularProgressIndicator(
-                    color: Colors.white, strokeWidth: 2.5))
-            : Text(label, style: const TextStyle(
-                color: Colors.white, fontSize: 15,
-                fontWeight: FontWeight.w700))),
+        child: Center(
+            child: loading
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                        color: Colors.white, strokeWidth: 2.5))
+                : Text(label,
+                    style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700))),
       ),
     );
   }
@@ -968,13 +999,15 @@ class _BookingScreenState extends State<BookingScreen>
       child: Container(
         height: 54,
         decoration: BoxDecoration(
-          color: kSurfaceBg,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: kBorder),
-        ),
-        child: Center(child: Text(label,
-          style: const TextStyle(color: kTextSecondary,
-            fontSize: 15, fontWeight: FontWeight.w600))),
+            color: kSurfaceBg,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: kBorder)),
+        child: Center(
+            child: Text(label,
+                style: const TextStyle(
+                    color: kTextSecondary,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600))),
       ),
     );
   }
