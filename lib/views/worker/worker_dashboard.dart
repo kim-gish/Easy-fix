@@ -5,6 +5,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:http/http.dart' as http;
+import '../booking/review_screen.dart';
 
 const Color kPrimaryGreen  = Color(0xFF1A7A4A);
 const Color kAccentGreen   = Color(0xFF25A865);
@@ -15,8 +16,8 @@ const Color kBorder        = Color(0xFF2E2E2E);
 const Color kTextPrimary   = Color(0xFFFFFFFF);
 const Color kTextSecondary = Color(0xFF9E9E9E);
 
-// ── IMPORTANT: Replace with your actual Render backend URL ───────────────────
-const String kBackendUrl = 'https://your-render-url.onrender.com';
+// ── Replace with your actual Render backend URL after deploying ───────────────
+const String kBackendUrl = 'https://easyfixmpesa.onrender.com';
 
 class WorkerDashboard extends StatefulWidget {
   const WorkerDashboard({super.key});
@@ -44,22 +45,31 @@ class _WorkerDashboardState extends State<WorkerDashboard>
       statusBarColor: Colors.transparent,
       statusBarIconBrightness: Brightness.light,
     ));
-    _animCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 600));
-    _fadeAnim = CurvedAnimation(parent: _animCtrl, curve: Curves.easeOut);
+    _animCtrl = AnimationController(
+        vsync: this, duration: const Duration(milliseconds: 600));
+    _fadeAnim =
+        CurvedAnimation(parent: _animCtrl, curve: Curves.easeOut);
     _animCtrl.forward();
     _loadWorkerData();
   }
 
   @override
-  void dispose() { _animCtrl.dispose(); super.dispose(); }
+  void dispose() {
+    _animCtrl.dispose();
+    super.dispose();
+  }
 
+  // ── Load worker profile from Firestore ────────────────────────────────────
   Future<void> _loadWorkerData() async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return;
     try {
-      final doc = await FirebaseFirestore.instance.collection('workers').doc(uid).get();
+      final doc = await FirebaseFirestore.instance
+          .collection('workers')
+          .doc(uid)
+          .get();
       if (doc.exists && mounted) {
-        final d = doc.data()!;
+        final d    = doc.data()!;
         final name = d['name'] ?? 'Worker';
         final parts = name.split(' ');
         setState(() {
@@ -68,14 +78,17 @@ class _WorkerDashboardState extends State<WorkerDashboard>
           _workerInitials = parts.length >= 2
               ? '${parts[0][0]}${parts[1][0]}'.toUpperCase()
               : name.substring(0, 2).toUpperCase();
-          _workerRating   = (d['rating'] ?? 0.0).toDouble();
-          _completedJobs  = d['completedJobs'] ?? 0;
-          _isAvailable    = d['isAvailable'] ?? true;
+          _workerRating  = (d['rating'] ?? 0.0).toDouble();
+          _completedJobs = d['completedJobs'] ?? 0;
+          _isAvailable   = d['isAvailable'] ?? true;
         });
       }
-    } catch (e) { debugPrint('Worker load error: $e'); }
+    } catch (e) {
+      debugPrint('Worker load error: $e');
+    }
   }
 
+  // ── Toggle availability ────────────────────────────────────────────────────
   Future<void> _toggleAvailability() async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return;
@@ -88,8 +101,13 @@ class _WorkerDashboardState extends State<WorkerDashboard>
     _showSnack(val ? 'You are now Online 🟢' : 'You are now Offline 🔴');
   }
 
-  Future<void> _acceptJob(String jobId, Map<String, dynamic> data) async {
-    await FirebaseFirestore.instance.collection('jobs').doc(jobId).update({
+  // ── Accept job ─────────────────────────────────────────────────────────────
+  Future<void> _acceptJob(
+      String jobId, Map<String, dynamic> data) async {
+    await FirebaseFirestore.instance
+        .collection('jobs')
+        .doc(jobId)
+        .update({
       'status':     'accepted',
       'acceptedAt': DateTime.now().toIso8601String(),
     });
@@ -97,6 +115,7 @@ class _WorkerDashboardState extends State<WorkerDashboard>
     _showAcceptedSheet(jobId, data);
   }
 
+  // ── Decline job ────────────────────────────────────────────────────────────
   Future<void> _declineJob(String jobId) async {
     await FirebaseFirestore.instance
         .collection('jobs')
@@ -105,9 +124,13 @@ class _WorkerDashboardState extends State<WorkerDashboard>
     _showSnack('Job declined');
   }
 
-  // ── Mark complete → open M-Pesa payment sheet ────────────────────────────
-  Future<void> _markComplete(String jobId, Map<String, dynamic> data) async {
-    await FirebaseFirestore.instance.collection('jobs').doc(jobId).update({
+  // ── Mark complete → open M-Pesa payment sheet ─────────────────────────────
+  Future<void> _markComplete(
+      String jobId, Map<String, dynamic> data) async {
+    await FirebaseFirestore.instance
+        .collection('jobs')
+        .doc(jobId)
+        .update({
       'status':      'completed',
       'completedAt': DateTime.now().toIso8601String(),
     });
@@ -134,17 +157,21 @@ class _WorkerDashboardState extends State<WorkerDashboard>
         final phone = doc.data()?['phone']?.toString() ?? '';
         if (phone.isNotEmpty) return phone;
       }
-    } catch (e) { debugPrint('Phone fetch error: $e'); }
+    } catch (e) {
+      debugPrint('Phone fetch error: $e');
+    }
     return null;
   }
 
-  // ── Call client ───────────────────────────────────────────────────────────
+  // ── Call client ────────────────────────────────────────────────────────────
   Future<void> _callUser(String userId, String userName) async {
     if (!mounted) return;
     showDialog(
-      context: context, barrierDismissible: false,
+      context: context,
+      barrierDismissible: false,
       builder: (_) => const Center(
-          child: CircularProgressIndicator(color: kAccentGreen)));
+          child: CircularProgressIndicator(color: kAccentGreen)),
+    );
 
     final phone = await _getUserPhone(userId);
     if (!mounted) return;
@@ -155,10 +182,12 @@ class _WorkerDashboardState extends State<WorkerDashboard>
       return;
     }
 
-    String formatted = phone.trim().replaceAll(' ', '').replaceAll('-', '');
+    String formatted =
+        phone.trim().replaceAll(' ', '').replaceAll('-', '');
     if (formatted.startsWith('0') && formatted.length == 10) {
       formatted = '+254${formatted.substring(1)}';
-    } else if (formatted.startsWith('254') && !formatted.startsWith('+')) {
+    } else if (formatted.startsWith('254') &&
+        !formatted.startsWith('+')) {
       formatted = '+$formatted';
     } else if (!formatted.startsWith('+')) {
       formatted = '+254$formatted';
@@ -172,7 +201,7 @@ class _WorkerDashboardState extends State<WorkerDashboard>
     }
   }
 
-  // ── M-Pesa STK Push via backend ───────────────────────────────────────────
+  // ── Trigger M-Pesa STK Push via backend ───────────────────────────────────
   Future<void> _triggerStkPush({
     required String customerPhone,
     required String amount,
@@ -194,12 +223,13 @@ class _WorkerDashboardState extends State<WorkerDashboard>
       final body = jsonDecode(response.body);
 
       if (response.statusCode == 200 && body['success'] == true) {
-        // Update job with requested amount
         await FirebaseFirestore.instance
             .collection('jobs')
             .doc(jobId)
-            .update({'amount': int.tryParse(amount) ?? 0, 'paymentRequested': true});
-
+            .update({
+          'amount':           int.tryParse(amount) ?? 0,
+          'paymentRequested': true,
+        });
         if (mounted) {
           _showSnack('M-Pesa prompt sent to $customerName ✅');
         }
@@ -209,275 +239,318 @@ class _WorkerDashboardState extends State<WorkerDashboard>
       }
     } catch (e) {
       debugPrint('STK Push error: $e');
-      if (mounted) _showSnack('Network error. Check connection and try again.');
+      if (mounted) {
+        _showSnack('Network error. Check connection and try again.');
+      }
     }
   }
 
   // ── M-Pesa payment bottom sheet ───────────────────────────────────────────
-  void _showMpesaPaymentSheet(String jobId, Map<String, dynamic> data) {
-    // Pre-fill from budget field (strip non-numeric chars)
-    final budgetStr = data['budget']?.toString() ?? '';
-    final prefilledAmount = budgetStr.replaceAll(RegExp(r'[^0-9]'), '');
-    final amountCtrl = TextEditingController(text: prefilledAmount);
-    bool isSending = false;
+  void _showMpesaPaymentSheet(
+      String jobId, Map<String, dynamic> data) {
+    final budgetStr      = data['budget']?.toString() ?? '';
+    final prefilledAmount =
+        budgetStr.replaceAll(RegExp(r'[^0-9]'), '');
+    final amountCtrl =
+        TextEditingController(text: prefilledAmount);
 
-    final customerUserId = data['userId']?.toString() ?? '';
-    final customerName   = data['name']?.toString() ?? data['userName']?.toString() ?? 'Client';
-    // customerPhone is saved directly on the job doc when booking is created
-    final customerPhone  = data['customerPhone']?.toString() ?? '';
+    final customerUserId =
+        data['userId']?.toString() ?? '';
+    final customerName =
+        data['name']?.toString() ??
+        data['userName']?.toString() ??
+        'Client';
+    final customerPhone =
+        data['customerPhone']?.toString() ?? '';
 
     showModalBottomSheet(
       context: context,
       backgroundColor: kCardBg,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(28))),
+          borderRadius:
+              BorderRadius.vertical(top: Radius.circular(28))),
       builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setSheetState) => Padding(
-          padding: EdgeInsets.fromLTRB(
-              24, 16, 24, MediaQuery.of(ctx).viewInsets.bottom + 40),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Handle
-              Container(width: 36, height: 4,
+        builder: (ctx, setSheetState) {
+          bool isSending = false;
+
+          return Padding(
+            padding: EdgeInsets.fromLTRB(
+                24,
+                16,
+                24,
+                MediaQuery.of(ctx).viewInsets.bottom + 40),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Handle
+                Container(
+                  width: 36, height: 4,
                   decoration: BoxDecoration(
                       color: kBorder,
-                      borderRadius: BorderRadius.circular(2))),
-              const SizedBox(height: 20),
-
-              // M-Pesa icon
-              Container(
-                width: 68, height: 68,
-                decoration: BoxDecoration(
-                  color: const Color(0xFF00A550).withOpacity(0.12),
-                  shape: BoxShape.circle,
-                  border: Border.all(
-                      color: const Color(0xFF00A550).withOpacity(0.35),
-                      width: 1.5),
+                      borderRadius: BorderRadius.circular(2)),
                 ),
-                child: const Center(
-                    child: Text('📱', style: TextStyle(fontSize: 30))),
-              ),
-              const SizedBox(height: 14),
+                const SizedBox(height: 20),
 
-              const Text('Request M-Pesa Payment',
-                  style: TextStyle(
-                      color: kTextPrimary,
-                      fontSize: 20,
-                      fontWeight: FontWeight.w800)),
-              const SizedBox(height: 6),
-
-              Text(
-                'Set the amount and send an M-Pesa prompt\nto $customerName\'s phone.',
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                    color: kTextSecondary, fontSize: 13, height: 1.5),
-              ),
-              const SizedBox(height: 20),
-
-              // Amount input
-              Container(
-                decoration: BoxDecoration(
-                    color: kSurfaceBg,
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(color: kBorder)),
-                child: Row(children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 14, vertical: 18),
-                    decoration: const BoxDecoration(
-                        border: Border(
-                            right: BorderSide(color: kBorder))),
-                    child: const Text('KES',
-                        style: TextStyle(
-                            color: kTextSecondary,
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600)),
+                // M-Pesa icon
+                Container(
+                  width: 68, height: 68,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF00A550).withOpacity(0.12),
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                        color: const Color(0xFF00A550)
+                            .withOpacity(0.35),
+                        width: 1.5),
                   ),
-                  Expanded(
-                    child: TextField(
-                      controller: amountCtrl,
-                      keyboardType: TextInputType.number,
-                      inputFormatters: [
-                        FilteringTextInputFormatter.digitsOnly
-                      ],
-                      style: const TextStyle(
-                          color: kTextPrimary,
-                          fontSize: 24,
-                          fontWeight: FontWeight.w700),
-                      decoration: const InputDecoration(
-                        hintText: '0',
-                        hintStyle:
-                            TextStyle(color: Color(0xFF555555)),
-                        border: InputBorder.none,
-                        contentPadding: EdgeInsets.symmetric(
-                            horizontal: 14, vertical: 14),
+                  child: const Center(
+                      child: Text('📱',
+                          style: TextStyle(fontSize: 30))),
+                ),
+                const SizedBox(height: 14),
+
+                const Text('Request M-Pesa Payment',
+                    style: TextStyle(
+                        color: kTextPrimary,
+                        fontSize: 20,
+                        fontWeight: FontWeight.w800)),
+                const SizedBox(height: 6),
+
+                Text(
+                  'Set the amount and send an M-Pesa prompt\nto $customerName\'s phone.',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                      color: kTextSecondary,
+                      fontSize: 13,
+                      height: 1.5),
+                ),
+                const SizedBox(height: 20),
+
+                // Amount input
+                Container(
+                  decoration: BoxDecoration(
+                      color: kSurfaceBg,
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: kBorder)),
+                  child: Row(children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 18),
+                      decoration: const BoxDecoration(
+                          border: Border(
+                              right: BorderSide(color: kBorder))),
+                      child: const Text('KES',
+                          style: TextStyle(
+                              color: kTextSecondary,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600)),
+                    ),
+                    Expanded(
+                      child: TextField(
+                        controller: amountCtrl,
+                        keyboardType: TextInputType.number,
+                        inputFormatters: [
+                          FilteringTextInputFormatter.digitsOnly
+                        ],
+                        style: const TextStyle(
+                            color: kTextPrimary,
+                            fontSize: 24,
+                            fontWeight: FontWeight.w700),
+                        decoration: const InputDecoration(
+                          hintText: '0',
+                          hintStyle: TextStyle(
+                              color: Color(0xFF555555)),
+                          border: InputBorder.none,
+                          contentPadding: EdgeInsets.symmetric(
+                              horizontal: 14, vertical: 14),
+                        ),
                       ),
                     ),
-                  ),
-                ]),
-              ),
-              const SizedBox(height: 10),
-
-              // Quick amount chips
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: ['500', '1000', '1500', '2000', '3000', '5000']
-                    .map((amt) => GestureDetector(
-                          onTap: () => amountCtrl.text = amt,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 12, vertical: 7),
-                            decoration: BoxDecoration(
-                              color: kSurfaceBg,
-                              borderRadius: BorderRadius.circular(20),
-                              border: Border.all(color: kBorder),
-                            ),
-                            child: Text('KES $amt',
-                                style: const TextStyle(
-                                    color: kTextSecondary,
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w600)),
-                          ),
-                        ))
-                    .toList(),
-              ),
-              const SizedBox(height: 8),
-
-              // Info note
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: kAccentGreen.withOpacity(0.07),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                      color: kAccentGreen.withOpacity(0.2)),
+                  ]),
                 ),
-                child: Row(children: const [
-                  Text('ℹ️', style: TextStyle(fontSize: 14)),
-                  SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'The customer will receive an M-Pesa PIN prompt on their phone. Once they enter their PIN, the money goes directly to your M-Pesa number.',
-                      style: TextStyle(
-                          color: kTextSecondary,
-                          fontSize: 11,
-                          height: 1.5),
+                const SizedBox(height: 10),
+
+                // Quick amount chips
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    '500', '1000', '1500',
+                    '2000', '3000', '5000'
+                  ]
+                      .map((amt) => GestureDetector(
+                            onTap: () => amountCtrl.text = amt,
+                            child: Container(
+                              padding:
+                                  const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                      vertical: 7),
+                              decoration: BoxDecoration(
+                                color: kSurfaceBg,
+                                borderRadius:
+                                    BorderRadius.circular(20),
+                                border:
+                                    Border.all(color: kBorder),
+                              ),
+                              child: Text('KES $amt',
+                                  style: const TextStyle(
+                                      color: kTextSecondary,
+                                      fontSize: 12,
+                                      fontWeight:
+                                          FontWeight.w600)),
+                            ),
+                          ))
+                      .toList(),
+                ),
+                const SizedBox(height: 12),
+
+                // Info note
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: kAccentGreen.withOpacity(0.07),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                        color: kAccentGreen.withOpacity(0.2)),
+                  ),
+                  child: Row(children: const [
+                    Text('ℹ️', style: TextStyle(fontSize: 14)),
+                    SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'The customer will receive an M-Pesa PIN prompt on their phone. Once they enter their PIN, the money is sent directly to your M-Pesa number.',
+                        style: TextStyle(
+                            color: kTextSecondary,
+                            fontSize: 11,
+                            height: 1.5),
+                      ),
+                    ),
+                  ]),
+                ),
+                const SizedBox(height: 20),
+
+                // Send M-Pesa prompt button
+                GestureDetector(
+                  onTap: isSending
+                      ? null
+                      : () async {
+                          final amount =
+                              amountCtrl.text.trim();
+                          if (amount.isEmpty ||
+                              amount == '0') {
+                            _showSnack(
+                                'Please enter an amount');
+                            return;
+                          }
+
+                          // Resolve phone
+                          String phone = customerPhone;
+                          if (phone.isEmpty) {
+                            phone = await _getUserPhone(
+                                    customerUserId) ??
+                                '';
+                          }
+
+                          if (phone.isEmpty) {
+                            _showSnack(
+                                'Customer phone not found. Cannot send M-Pesa prompt.');
+                            return;
+                          }
+
+                          setSheetState(
+                              () => isSending = true);
+                          Navigator.pop(ctx);
+
+                          await _triggerStkPush(
+                            customerPhone: phone,
+                            amount:        amount,
+                            jobId:         jobId,
+                            customerName:  customerName,
+                          );
+                        },
+                  child: Container(
+                    width: double.infinity,
+                    height: 54,
+                    decoration: BoxDecoration(
+                      gradient: isSending
+                          ? null
+                          : const LinearGradient(
+                              colors: [
+                                Color(0xFF00A550),
+                                Color(0xFF00C060)
+                              ],
+                              begin: Alignment.centerLeft,
+                              end: Alignment.centerRight,
+                            ),
+                      color: isSending
+                          ? const Color(0xFF00A550)
+                              .withOpacity(0.4)
+                          : null,
+                      borderRadius: BorderRadius.circular(14),
+                      boxShadow: isSending
+                          ? []
+                          : [
+                              BoxShadow(
+                                color: const Color(0xFF00A550)
+                                    .withOpacity(0.4),
+                                blurRadius: 14,
+                                offset: const Offset(0, 6),
+                              )
+                            ],
+                    ),
+                    child: Center(
+                      child: isSending
+                          ? const SizedBox(
+                              width: 22, height: 22,
+                              child: CircularProgressIndicator(
+                                  color: Colors.white,
+                                  strokeWidth: 2.5))
+                          : const Row(
+                              mainAxisAlignment:
+                                  MainAxisAlignment.center,
+                              children: [
+                                Text('📲',
+                                    style: TextStyle(
+                                        fontSize: 18)),
+                                SizedBox(width: 8),
+                                Text('Send M-Pesa Prompt',
+                                    style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 15,
+                                        fontWeight:
+                                            FontWeight.w700)),
+                              ],
+                            ),
                     ),
                   ),
-                ]),
-              ),
-              const SizedBox(height: 20),
-
-              // Send M-Pesa prompt button
-              GestureDetector(
-                onTap: isSending
-                    ? null
-                    : () async {
-                        final amount = amountCtrl.text.trim();
-                        if (amount.isEmpty || amount == '0') {
-                          _showSnack('Please enter an amount');
-                          return;
-                        }
-
-                        // Resolve phone: prefer job doc field, else fetch
-                        String phone = customerPhone;
-                        if (phone.isEmpty) {
-                          phone = await _getUserPhone(customerUserId) ?? '';
-                        }
-
-                        if (phone.isEmpty) {
-                          _showSnack(
-                              'Customer phone not found. Cannot send M-Pesa prompt.');
-                          return;
-                        }
-
-                        setSheetState(() => isSending = true);
-
-                        Navigator.pop(ctx);
-
-                        await _triggerStkPush(
-                          customerPhone: phone,
-                          amount:        amount,
-                          jobId:         jobId,
-                          customerName:  customerName,
-                        );
-                      },
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 200),
-                  width: double.infinity,
-                  height: 54,
-                  decoration: BoxDecoration(
-                    gradient: isSending
-                        ? null
-                        : const LinearGradient(
-                            colors: [Color(0xFF00A550), Color(0xFF00C060)],
-                            begin: Alignment.centerLeft,
-                            end: Alignment.centerRight,
-                          ),
-                    color: isSending
-                        ? const Color(0xFF00A550).withOpacity(0.4)
-                        : null,
-                    borderRadius: BorderRadius.circular(14),
-                    boxShadow: isSending
-                        ? []
-                        : [
-                            BoxShadow(
-                              color: const Color(0xFF00A550)
-                                  .withOpacity(0.4),
-                              blurRadius: 14,
-                              offset: const Offset(0, 6),
-                            )
-                          ],
-                  ),
-                  child: Center(
-                    child: isSending
-                        ? const SizedBox(
-                            width: 22,
-                            height: 22,
-                            child: CircularProgressIndicator(
-                                color: Colors.white,
-                                strokeWidth: 2.5))
-                        : const Row(
-                            mainAxisAlignment:
-                                MainAxisAlignment.center,
-                            children: [
-                              Text('📲',
-                                  style: TextStyle(fontSize: 18)),
-                              SizedBox(width: 8),
-                              Text('Send M-Pesa Prompt',
-                                  style: TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 15,
-                                      fontWeight: FontWeight.w700)),
-                            ],
-                          ),
-                  ),
                 ),
-              ),
-            ],
-          ),
-        ),
+              ],
+            ),
+          );
+        },
       ),
     );
   }
 
-  void _showAcceptedSheet(String jobId, Map<String, dynamic> data) {
+  // ── Accepted job sheet ─────────────────────────────────────────────────────
+  void _showAcceptedSheet(
+      String jobId, Map<String, dynamic> data) {
     showModalBottomSheet(
       context: context,
       backgroundColor: kCardBg,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(28))),
+          borderRadius:
+              BorderRadius.vertical(top: Radius.circular(28))),
       builder: (ctx) => Padding(
         padding: EdgeInsets.fromLTRB(
-            24, 16, 24, MediaQuery.of(context).viewInsets.bottom + 40),
+            24,
+            16,
+            24,
+            MediaQuery.of(context).viewInsets.bottom + 40),
         child: Column(mainAxisSize: MainAxisSize.min, children: [
           Container(
-              width: 36,
-              height: 4,
+              width: 36, height: 4,
               decoration: BoxDecoration(
                   color: kBorder,
                   borderRadius: BorderRadius.circular(2))),
@@ -496,7 +569,8 @@ class _WorkerDashboardState extends State<WorkerDashboard>
               ],
             ),
             child: const Center(
-                child: Text('🤝', style: TextStyle(fontSize: 30))),
+                child: Text('🤝',
+                    style: TextStyle(fontSize: 30))),
           ),
           const SizedBox(height: 14),
           const Text('Job Accepted!',
@@ -509,7 +583,9 @@ class _WorkerDashboardState extends State<WorkerDashboard>
             'You accepted a ${data['category'] ?? 'repair'} job.\nHead to the client\'s location.',
             textAlign: TextAlign.center,
             style: const TextStyle(
-                color: kTextSecondary, fontSize: 14, height: 1.5),
+                color: kTextSecondary,
+                fontSize: 14,
+                height: 1.5),
           ),
           const SizedBox(height: 16),
           Container(
@@ -519,13 +595,14 @@ class _WorkerDashboardState extends State<WorkerDashboard>
                 borderRadius: BorderRadius.circular(14),
                 border: Border.all(color: kBorder)),
             child: Column(children: [
-              _sheetRow('📍', 'Location', data['location'] ?? '—'),
+              _sheetRow('📍', 'Location',
+                  data['location'] ?? '—'),
               const SizedBox(height: 8),
               _sheetRow('📅', 'Date & Time',
                   '${data['date'] ?? '—'} at ${data['time'] ?? '—'}'),
               const SizedBox(height: 8),
-              _sheetRow(
-                  '💰', 'Budget', data['budget'] ?? 'Negotiable'),
+              _sheetRow('💰', 'Budget',
+                  data['budget'] ?? 'Negotiable'),
             ]),
           ),
           const SizedBox(height: 14),
@@ -533,8 +610,9 @@ class _WorkerDashboardState extends State<WorkerDashboard>
             onTap: () {
               Navigator.pop(ctx);
               _callUser(
-                  data['userId'] ?? '',
-                  data['name'] ?? data['userName'] ?? 'Client');
+                data['userId'] ?? '',
+                data['name'] ?? data['userName'] ?? 'Client',
+              );
             },
             child: Container(
               width: double.infinity, height: 50,
@@ -544,7 +622,8 @@ class _WorkerDashboardState extends State<WorkerDashboard>
                   border: Border.all(
                       color: kAccentGreen.withOpacity(0.4))),
               child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisAlignment:
+                      MainAxisAlignment.center,
                   children: const [
                     Icon(Icons.call_rounded,
                         color: kAccentGreen, size: 20),
@@ -581,36 +660,39 @@ class _WorkerDashboardState extends State<WorkerDashboard>
 
   void _showSnack(String msg) {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(msg, style: const TextStyle(color: Colors.white)),
+      content:
+          Text(msg, style: const TextStyle(color: Colors.white)),
       backgroundColor: kCardBg,
       behavior: SnackBarBehavior.floating,
-      shape:
-          RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12)),
       margin: const EdgeInsets.all(16),
     ));
   }
 
   Widget _sheetRow(String emoji, String label, String value) {
-    return Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+    return Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
       Text(emoji, style: const TextStyle(fontSize: 15)),
       const SizedBox(width: 8),
       Expanded(
           child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-            Text(label,
-                style: const TextStyle(
-                    color: kTextSecondary, fontSize: 11)),
-            Text(value,
-                style: const TextStyle(
-                    color: kTextPrimary,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600)),
-          ])),
+        Text(label,
+            style: const TextStyle(
+                color: kTextSecondary, fontSize: 11)),
+        Text(value,
+            style: const TextStyle(
+                color: kTextPrimary,
+                fontSize: 13,
+                fontWeight: FontWeight.w600)),
+      ])),
     ]);
   }
 
-  // ── BUILD ─────────────────────────────────────────────────────────────────
+  // ── BUILD ──────────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -623,9 +705,52 @@ class _WorkerDashboardState extends State<WorkerDashboard>
             _buildAppBar(),
             SliverToBoxAdapter(child: _buildAvailabilityCard()),
             SliverToBoxAdapter(child: _buildStatsRow()),
+
+            // ── My Reviews button ─────────────────────────────────────
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                child: GestureDetector(
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => ReviewsScreen(
+                        workerId:
+                            FirebaseAuth.instance.currentUser!.uid,
+                        workerName: _workerName,
+                      ),
+                    ),
+                  ),
+                  child: Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: kCardBg,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: kBorder),
+                    ),
+                    child: Row(children: const [
+                      Text('⭐',
+                          style: TextStyle(fontSize: 20)),
+                      SizedBox(width: 12),
+                      Expanded(
+                        child: Text('My Reviews',
+                            style: TextStyle(
+                                color: kTextPrimary,
+                                fontSize: 15,
+                                fontWeight: FontWeight.w700)),
+                      ),
+                      Icon(Icons.arrow_forward_ios_rounded,
+                          color: kTextSecondary, size: 14),
+                    ]),
+                  ),
+                ),
+              ),
+            ),
+
             SliverToBoxAdapter(child: _buildTabBar()),
             SliverToBoxAdapter(child: _buildTabContent()),
-            const SliverToBoxAdapter(child: SizedBox(height: 100)),
+            const SliverToBoxAdapter(
+                child: SizedBox(height: 100)),
           ],
         ),
       ),
@@ -633,6 +758,7 @@ class _WorkerDashboardState extends State<WorkerDashboard>
     );
   }
 
+  // ── App bar ────────────────────────────────────────────────────────────────
   Widget _buildAppBar() {
     return SliverAppBar(
       backgroundColor: kDarkBg,
@@ -650,16 +776,19 @@ class _WorkerDashboardState extends State<WorkerDashboard>
                   colors: [
                 Color(0xFF0F3D26),
                 Color(0xFF1A7A4A),
-                Color(0xFF0D2B1A)
+                Color(0xFF0D2B1A),
               ])),
-          padding: const EdgeInsets.fromLTRB(20, 56, 20, 16),
+          padding:
+              const EdgeInsets.fromLTRB(20, 56, 20, 16),
           child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            mainAxisAlignment:
+                MainAxisAlignment.spaceBetween,
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               Column(
                   mainAxisAlignment: MainAxisAlignment.end,
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                  crossAxisAlignment:
+                      CrossAxisAlignment.start,
                   children: [
                     const Text('Worker Dashboard',
                         style: TextStyle(
@@ -676,20 +805,23 @@ class _WorkerDashboardState extends State<WorkerDashboard>
                   ]),
               Row(children: [
                 Container(
-                    width: 38,
-                    height: 38,
+                    width: 38, height: 38,
                     decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.12),
-                        borderRadius: BorderRadius.circular(12)),
-                    child: const Icon(Icons.notifications_none_rounded,
-                        color: Colors.white, size: 20)),
+                        color:
+                            Colors.white.withOpacity(0.12),
+                        borderRadius:
+                            BorderRadius.circular(12)),
+                    child: const Icon(
+                        Icons.notifications_none_rounded,
+                        color: Colors.white,
+                        size: 20)),
                 const SizedBox(width: 8),
                 Container(
-                    width: 38,
-                    height: 38,
+                    width: 38, height: 38,
                     decoration: BoxDecoration(
                         color: kAccentGreen,
-                        borderRadius: BorderRadius.circular(12)),
+                        borderRadius:
+                            BorderRadius.circular(12)),
                     child: Center(
                         child: Text(_workerInitials,
                             style: const TextStyle(
@@ -704,6 +836,7 @@ class _WorkerDashboardState extends State<WorkerDashboard>
     );
   }
 
+  // ── Availability card ──────────────────────────────────────────────────────
   Widget _buildAvailabilityCard() {
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
@@ -719,8 +852,8 @@ class _WorkerDashboardState extends State<WorkerDashboard>
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight),
         borderRadius: BorderRadius.circular(20),
-        border:
-            Border.all(color: _isAvailable ? kAccentGreen : kBorder),
+        border: Border.all(
+            color: _isAvailable ? kAccentGreen : kBorder),
         boxShadow: _isAvailable
             ? [
                 BoxShadow(
@@ -732,46 +865,46 @@ class _WorkerDashboardState extends State<WorkerDashboard>
       ),
       child: Row(children: [
         Container(
-            width: 48,
-            height: 48,
+            width: 48, height: 48,
             decoration: BoxDecoration(
                 color: Colors.white
                     .withOpacity(_isAvailable ? 0.15 : 0.05),
                 borderRadius: BorderRadius.circular(14)),
             child: Center(
                 child: Text(_isAvailable ? '🟢' : '🔴',
-                    style: const TextStyle(fontSize: 22)))),
+                    style:
+                        const TextStyle(fontSize: 22)))),
         const SizedBox(width: 14),
         Expanded(
             child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+                crossAxisAlignment:
+                    CrossAxisAlignment.start,
                 children: [
-              Text(
-                  _isAvailable
-                      ? 'You are Available'
-                      : 'You are Offline',
-                  style: TextStyle(
-                      color: _isAvailable
-                          ? Colors.white
-                          : kTextPrimary,
-                      fontSize: 16,
-                      fontWeight: FontWeight.w800)),
-              Text(
-                  _isAvailable
-                      ? 'Accepting new job requests'
-                      : 'Toggle on to receive jobs',
-                  style: TextStyle(
-                      color: _isAvailable
-                          ? Colors.white.withOpacity(0.8)
-                          : kTextSecondary,
-                      fontSize: 13)),
-            ])),
+          Text(
+              _isAvailable
+                  ? 'You are Available'
+                  : 'You are Offline',
+              style: TextStyle(
+                  color: _isAvailable
+                      ? Colors.white
+                      : kTextPrimary,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w800)),
+          Text(
+              _isAvailable
+                  ? 'Accepting new job requests'
+                  : 'Toggle on to receive jobs',
+              style: TextStyle(
+                  color: _isAvailable
+                      ? Colors.white.withOpacity(0.8)
+                      : kTextSecondary,
+                  fontSize: 13)),
+        ])),
         GestureDetector(
           onTap: _toggleAvailability,
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 300),
-            width: 56,
-            height: 30,
+            width: 56, height: 30,
             decoration: BoxDecoration(
                 color: _isAvailable
                     ? Colors.white.withOpacity(0.25)
@@ -790,8 +923,7 @@ class _WorkerDashboardState extends State<WorkerDashboard>
                   : Alignment.centerLeft,
               child: Container(
                   margin: const EdgeInsets.all(3),
-                  width: 24,
-                  height: 24,
+                  width: 24, height: 24,
                   decoration: BoxDecoration(
                       color: _isAvailable
                           ? Colors.white
@@ -799,7 +931,8 @@ class _WorkerDashboardState extends State<WorkerDashboard>
                       shape: BoxShape.circle,
                       boxShadow: [
                         BoxShadow(
-                            color: Colors.black.withOpacity(0.2),
+                            color:
+                                Colors.black.withOpacity(0.2),
                             blurRadius: 4)
                       ])),
             ),
@@ -809,28 +942,32 @@ class _WorkerDashboardState extends State<WorkerDashboard>
     );
   }
 
+  // ── Stats row ──────────────────────────────────────────────────────────────
   Widget _buildStatsRow() {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
       child: Row(children: [
-        _statCard('⭐',
+        _statCard(
+            '⭐',
             _workerRating == 0
                 ? 'New'
                 : _workerRating.toStringAsFixed(1),
             'Rating'),
         const SizedBox(width: 10),
-        _statCard('✅', _completedJobs.toString(), 'Completed'),
+        _statCard(
+            '✅', _completedJobs.toString(), 'Completed'),
         const SizedBox(width: 10),
         _statCard('🔧', _workerTrade, 'Trade'),
       ]),
     );
   }
 
-  Widget _statCard(String emoji, String value, String label) {
+  Widget _statCard(
+      String emoji, String value, String label) {
     return Expanded(
         child: Container(
-      padding:
-          const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
+      padding: const EdgeInsets.symmetric(
+          vertical: 14, horizontal: 12),
       decoration: BoxDecoration(
           color: kCardBg,
           borderRadius: BorderRadius.circular(16),
@@ -852,6 +989,7 @@ class _WorkerDashboardState extends State<WorkerDashboard>
     ));
   }
 
+  // ── Tab bar ────────────────────────────────────────────────────────────────
   Widget _buildTabBar() {
     final tabs = ['Requests', 'Active', 'History'];
     return Padding(
@@ -867,17 +1005,23 @@ class _WorkerDashboardState extends State<WorkerDashboard>
           final sel = e.key == _selectedTab;
           return Expanded(
               child: GestureDetector(
-            onTap: () => setState(() => _selectedTab = e.key),
+            onTap: () =>
+                setState(() => _selectedTab = e.key),
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 250),
-              padding: const EdgeInsets.symmetric(vertical: 11),
+              padding:
+                  const EdgeInsets.symmetric(vertical: 11),
               decoration: BoxDecoration(
-                  color: sel ? kPrimaryGreen : Colors.transparent,
+                  color: sel
+                      ? kPrimaryGreen
+                      : Colors.transparent,
                   borderRadius: BorderRadius.circular(10)),
               child: Center(
                   child: Text(e.value,
                       style: TextStyle(
-                          color: sel ? Colors.white : kTextSecondary,
+                          color: sel
+                              ? Colors.white
+                              : kTextSecondary,
                           fontSize: 13,
                           fontWeight: sel
                               ? FontWeight.w700
@@ -891,13 +1035,14 @@ class _WorkerDashboardState extends State<WorkerDashboard>
 
   Widget _buildTabContent() {
     switch (_selectedTab) {
-      case 0: return _buildRequests();
-      case 1: return _buildActive();
-      case 2: return _buildHistory();
+      case 0:  return _buildRequests();
+      case 1:  return _buildActive();
+      case 2:  return _buildHistory();
       default: return _buildRequests();
     }
   }
 
+  // ── Requests tab ───────────────────────────────────────────────────────────
   Widget _buildRequests() {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     return StreamBuilder<QuerySnapshot>(
@@ -907,31 +1052,39 @@ class _WorkerDashboardState extends State<WorkerDashboard>
           .where('status', isEqualTo: 'pending')
           .snapshots(),
       builder: (context, snap) {
-        if (snap.connectionState == ConnectionState.waiting) {
+        if (snap.connectionState ==
+            ConnectionState.waiting) {
           return const Padding(
               padding: EdgeInsets.all(40),
               child: Center(
                   child: CircularProgressIndicator(
-                      color: kAccentGreen, strokeWidth: 2)));
+                      color: kAccentGreen,
+                      strokeWidth: 2)));
         }
         final jobs = snap.data?.docs ?? [];
         if (jobs.isEmpty) {
-          return _empty('📭', 'No pending requests',
+          return _empty(
+              '📭',
+              'No pending requests',
               _isAvailable
                   ? 'New requests will appear here'
                   : 'Go online to receive jobs');
         }
         return Padding(
-            padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
+            padding:
+                const EdgeInsets.fromLTRB(16, 14, 16, 0),
             child: Column(
                 children: jobs
                     .map((d) => _requestCard(
-                        d.id, d.data() as Map<String, dynamic>))
+                        d.id,
+                        d.data()
+                            as Map<String, dynamic>))
                     .toList()));
       },
     );
   }
 
+  // ── Active tab ─────────────────────────────────────────────────────────────
   Widget _buildActive() {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     return StreamBuilder<QuerySnapshot>(
@@ -941,29 +1094,35 @@ class _WorkerDashboardState extends State<WorkerDashboard>
           .where('status', isEqualTo: 'accepted')
           .snapshots(),
       builder: (context, snap) {
-        if (snap.connectionState == ConnectionState.waiting) {
+        if (snap.connectionState ==
+            ConnectionState.waiting) {
           return const Padding(
               padding: EdgeInsets.all(40),
               child: Center(
                   child: CircularProgressIndicator(
-                      color: kAccentGreen, strokeWidth: 2)));
+                      color: kAccentGreen,
+                      strokeWidth: 2)));
         }
         final jobs = snap.data?.docs ?? [];
         if (jobs.isEmpty) {
-          return _empty(
-              '🔨', 'No active jobs', 'Accepted jobs appear here');
+          return _empty('🔨', 'No active jobs',
+              'Accepted jobs appear here');
         }
         return Padding(
-            padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
+            padding:
+                const EdgeInsets.fromLTRB(16, 14, 16, 0),
             child: Column(
                 children: jobs
                     .map((d) => _activeCard(
-                        d.id, d.data() as Map<String, dynamic>))
+                        d.id,
+                        d.data()
+                            as Map<String, dynamic>))
                     .toList()));
       },
     );
   }
 
+  // ── History tab ────────────────────────────────────────────────────────────
   Widget _buildHistory() {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     return StreamBuilder<QuerySnapshot>(
@@ -973,54 +1132,63 @@ class _WorkerDashboardState extends State<WorkerDashboard>
           .where('status', isEqualTo: 'completed')
           .snapshots(),
       builder: (context, snap) {
-        if (snap.connectionState == ConnectionState.waiting) {
+        if (snap.connectionState ==
+            ConnectionState.waiting) {
           return const Padding(
               padding: EdgeInsets.all(40),
               child: Center(
                   child: CircularProgressIndicator(
-                      color: kAccentGreen, strokeWidth: 2)));
+                      color: kAccentGreen,
+                      strokeWidth: 2)));
         }
         final jobs = snap.data?.docs ?? [];
         if (jobs.isEmpty) {
-          return _empty(
-              '📋', 'No completed jobs', 'Your history appears here');
+          return _empty('📋', 'No completed jobs',
+              'Your history appears here');
         }
         return Padding(
-            padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
+            padding:
+                const EdgeInsets.fromLTRB(16, 14, 16, 0),
             child: Column(
                 children: jobs
-                    .map((d) =>
-                        _histCard(d.data() as Map<String, dynamic>))
+                    .map((d) => _histCard(
+                        d.data() as Map<String, dynamic>))
                     .toList()));
       },
     );
   }
 
-  Widget _requestCard(String jobId, Map<String, dynamic> data) {
+  // ── Request card ───────────────────────────────────────────────────────────
+  Widget _requestCard(
+      String jobId, Map<String, dynamic> data) {
     return Container(
       margin: const EdgeInsets.only(bottom: 14),
       decoration: BoxDecoration(
           color: kCardBg,
           borderRadius: BorderRadius.circular(20),
-          border:
-              Border.all(color: kAccentGreen.withOpacity(0.25))),
+          border: Border.all(
+              color: kAccentGreen.withOpacity(0.25))),
       child: Column(children: [
         Padding(
             padding: const EdgeInsets.all(16),
             child: Row(children: [
               Container(
-                  width: 46,
-                  height: 46,
+                  width: 46, height: 46,
                   decoration: BoxDecoration(
-                      color: kPrimaryGreen.withOpacity(0.15),
-                      borderRadius: BorderRadius.circular(14)),
+                      color:
+                          kPrimaryGreen.withOpacity(0.15),
+                      borderRadius:
+                          BorderRadius.circular(14)),
                   child: Center(
-                      child: Text(_emoji(data['category'] ?? ''),
-                          style: const TextStyle(fontSize: 22)))),
+                      child: Text(
+                          _emoji(data['category'] ?? ''),
+                          style: const TextStyle(
+                              fontSize: 22)))),
               const SizedBox(width: 12),
               Expanded(
                   child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                      crossAxisAlignment:
+                          CrossAxisAlignment.start,
                       children: [
                 Text(data['category'] ?? 'Repair',
                     style: const TextStyle(
@@ -1030,15 +1198,17 @@ class _WorkerDashboardState extends State<WorkerDashboard>
                 Text(
                     'from ${data['name'] ?? data['userName'] ?? 'User'}',
                     style: const TextStyle(
-                        color: kTextSecondary, fontSize: 13)),
+                        color: kTextSecondary,
+                        fontSize: 13)),
               ])),
               Container(
                   padding: const EdgeInsets.symmetric(
                       horizontal: 10, vertical: 5),
                   decoration: BoxDecoration(
-                      color:
-                          const Color(0xFFFFC107).withOpacity(0.12),
-                      borderRadius: BorderRadius.circular(8)),
+                      color: const Color(0xFFFFC107)
+                          .withOpacity(0.12),
+                      borderRadius:
+                          BorderRadius.circular(8)),
                   child: const Text('New',
                       style: TextStyle(
                           color: Color(0xFFFFC107),
@@ -1072,14 +1242,17 @@ class _WorkerDashboardState extends State<WorkerDashboard>
                     height: 46,
                     decoration: BoxDecoration(
                         color: kSurfaceBg,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: kBorder)),
+                        borderRadius:
+                            BorderRadius.circular(12),
+                        border:
+                            Border.all(color: kBorder)),
                     child: const Center(
                         child: Text('Decline',
                             style: TextStyle(
                                 color: kTextSecondary,
                                 fontSize: 14,
-                                fontWeight: FontWeight.w600)))),
+                                fontWeight:
+                                    FontWeight.w600)))),
               )),
               const SizedBox(width: 10),
               Expanded(
@@ -1090,11 +1263,16 @@ class _WorkerDashboardState extends State<WorkerDashboard>
                     height: 46,
                     decoration: BoxDecoration(
                         gradient: const LinearGradient(
-                            colors: [kPrimaryGreen, kAccentGreen]),
-                        borderRadius: BorderRadius.circular(12),
+                            colors: [
+                              kPrimaryGreen,
+                              kAccentGreen
+                            ]),
+                        borderRadius:
+                            BorderRadius.circular(12),
                         boxShadow: [
                           BoxShadow(
-                              color: kPrimaryGreen.withOpacity(0.3),
+                              color: kPrimaryGreen
+                                  .withOpacity(0.3),
                               blurRadius: 10,
                               offset: const Offset(0, 4))
                         ]),
@@ -1103,38 +1281,45 @@ class _WorkerDashboardState extends State<WorkerDashboard>
                             style: TextStyle(
                                 color: Colors.white,
                                 fontSize: 14,
-                                fontWeight: FontWeight.w700)))),
+                                fontWeight:
+                                    FontWeight.w700)))),
               )),
             ])),
       ]),
     );
   }
 
-  Widget _activeCard(String jobId, Map<String, dynamic> data) {
+  // ── Active card ────────────────────────────────────────────────────────────
+  Widget _activeCard(
+      String jobId, Map<String, dynamic> data) {
     return Container(
       margin: const EdgeInsets.only(bottom: 14),
       decoration: BoxDecoration(
           color: kCardBg,
           borderRadius: BorderRadius.circular(20),
-          border:
-              Border.all(color: kAccentGreen.withOpacity(0.4))),
+          border: Border.all(
+              color: kAccentGreen.withOpacity(0.4))),
       child: Column(children: [
         Padding(
             padding: const EdgeInsets.all(16),
             child: Row(children: [
               Container(
-                  width: 46,
-                  height: 46,
+                  width: 46, height: 46,
                   decoration: BoxDecoration(
-                      color: kAccentGreen.withOpacity(0.15),
-                      borderRadius: BorderRadius.circular(14)),
+                      color:
+                          kAccentGreen.withOpacity(0.15),
+                      borderRadius:
+                          BorderRadius.circular(14)),
                   child: Center(
-                      child: Text(_emoji(data['category'] ?? ''),
-                          style: const TextStyle(fontSize: 22)))),
+                      child: Text(
+                          _emoji(data['category'] ?? ''),
+                          style: const TextStyle(
+                              fontSize: 22)))),
               const SizedBox(width: 12),
               Expanded(
                   child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                      crossAxisAlignment:
+                          CrossAxisAlignment.start,
                       children: [
                 Text(data['category'] ?? 'Job',
                     style: const TextStyle(
@@ -1143,14 +1328,17 @@ class _WorkerDashboardState extends State<WorkerDashboard>
                         fontWeight: FontWeight.w800)),
                 Text(data['location'] ?? '—',
                     style: const TextStyle(
-                        color: kTextSecondary, fontSize: 12)),
+                        color: kTextSecondary,
+                        fontSize: 12)),
               ])),
               Container(
                   padding: const EdgeInsets.symmetric(
                       horizontal: 10, vertical: 5),
                   decoration: BoxDecoration(
-                      color: kAccentGreen.withOpacity(0.15),
-                      borderRadius: BorderRadius.circular(8)),
+                      color:
+                          kAccentGreen.withOpacity(0.15),
+                      borderRadius:
+                          BorderRadius.circular(8)),
                   child: const Text('Active',
                       style: TextStyle(
                           color: kAccentGreen,
@@ -1178,26 +1366,32 @@ class _WorkerDashboardState extends State<WorkerDashboard>
                   child: GestureDetector(
                 onTap: () => _callUser(
                     data['userId'] ?? '',
-                    data['name'] ?? data['userName'] ?? 'Client'),
+                    data['name'] ??
+                        data['userName'] ??
+                        'Client'),
                 child: Container(
                     height: 46,
                     decoration: BoxDecoration(
                         color: kSurfaceBg,
-                        borderRadius: BorderRadius.circular(12),
+                        borderRadius:
+                            BorderRadius.circular(12),
                         border: Border.all(
-                            color: kAccentGreen.withOpacity(0.3))),
+                            color: kAccentGreen
+                                .withOpacity(0.3))),
                     child: Row(
                         mainAxisAlignment:
                             MainAxisAlignment.center,
                         children: const [
                           Icon(Icons.call_rounded,
-                              color: kAccentGreen, size: 16),
+                              color: kAccentGreen,
+                              size: 16),
                           SizedBox(width: 6),
                           Text('Call',
                               style: TextStyle(
                                   color: kAccentGreen,
                                   fontSize: 13,
-                                  fontWeight: FontWeight.w700)),
+                                  fontWeight:
+                                      FontWeight.w700)),
                         ])),
               )),
               const SizedBox(width: 10),
@@ -1209,11 +1403,16 @@ class _WorkerDashboardState extends State<WorkerDashboard>
                     height: 46,
                     decoration: BoxDecoration(
                         gradient: const LinearGradient(
-                            colors: [kPrimaryGreen, kAccentGreen]),
-                        borderRadius: BorderRadius.circular(12),
+                            colors: [
+                              kPrimaryGreen,
+                              kAccentGreen
+                            ]),
+                        borderRadius:
+                            BorderRadius.circular(12),
                         boxShadow: [
                           BoxShadow(
-                              color: kPrimaryGreen.withOpacity(0.3),
+                              color: kPrimaryGreen
+                                  .withOpacity(0.3),
                               blurRadius: 10,
                               offset: const Offset(0, 4))
                         ]),
@@ -1222,13 +1421,15 @@ class _WorkerDashboardState extends State<WorkerDashboard>
                             style: TextStyle(
                                 color: Colors.white,
                                 fontSize: 13,
-                                fontWeight: FontWeight.w700)))),
+                                fontWeight:
+                                    FontWeight.w700)))),
               )),
             ])),
       ]),
     );
   }
 
+  // ── History card ───────────────────────────────────────────────────────────
   Widget _histCard(Map<String, dynamic> data) {
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
@@ -1239,18 +1440,20 @@ class _WorkerDashboardState extends State<WorkerDashboard>
           border: Border.all(color: kBorder)),
       child: Row(children: [
         Container(
-            width: 44,
-            height: 44,
+            width: 44, height: 44,
             decoration: BoxDecoration(
                 color: kPrimaryGreen.withOpacity(0.15),
                 borderRadius: BorderRadius.circular(12)),
             child: Center(
-                child: Text(_emoji(data['category'] ?? ''),
-                    style: const TextStyle(fontSize: 18)))),
+                child: Text(
+                    _emoji(data['category'] ?? ''),
+                    style:
+                        const TextStyle(fontSize: 18)))),
         const SizedBox(width: 12),
         Expanded(
             child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+                crossAxisAlignment:
+                    CrossAxisAlignment.start,
                 children: [
           Text(data['category'] ?? 'Repair',
               style: const TextStyle(
@@ -1262,7 +1465,9 @@ class _WorkerDashboardState extends State<WorkerDashboard>
               style: const TextStyle(
                   color: kTextSecondary, fontSize: 12)),
         ])),
-        Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+        Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
           Text(data['budget'] ?? '—',
               style: const TextStyle(
                   color: kTextPrimary,
@@ -1270,8 +1475,8 @@ class _WorkerDashboardState extends State<WorkerDashboard>
                   fontWeight: FontWeight.w700)),
           const SizedBox(height: 4),
           Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              padding: const EdgeInsets.symmetric(
+                  horizontal: 8, vertical: 3),
               decoration: BoxDecoration(
                   color: kAccentGreen.withOpacity(0.15),
                   borderRadius: BorderRadius.circular(6)),
@@ -1285,35 +1490,41 @@ class _WorkerDashboardState extends State<WorkerDashboard>
     );
   }
 
+  // ── Helper widgets ─────────────────────────────────────────────────────────
   Widget _dRow(IconData icon, String text) =>
-      Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Row(crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
         Icon(icon, color: kTextSecondary, size: 15),
         const SizedBox(width: 8),
         Expanded(
             child: Text(text,
                 style: const TextStyle(
-                    color: kTextSecondary, fontSize: 13, height: 1.4))),
+                    color: kTextSecondary,
+                    fontSize: 13,
+                    height: 1.4))),
       ]);
 
   String _emoji(String cat) {
     switch (cat.toLowerCase()) {
-      case 'plumbing':    return '🔧';
-      case 'electrical':  return '⚡';
-      case 'ac repair':   return '❄️';
-      case 'painting':    return '🎨';
-      case 'windows':     return '🪟';
-      case 'cleaning':    return '🌿';
-      case 'handyman':    return '🔨';
-      case 'masonry':     return '🚿';
-      default:            return '🛠️';
+      case 'plumbing':   return '🔧';
+      case 'electrical': return '⚡';
+      case 'ac repair':  return '❄️';
+      case 'painting':   return '🎨';
+      case 'windows':    return '🪟';
+      case 'cleaning':   return '🌿';
+      case 'handyman':   return '🔨';
+      case 'masonry':    return '🚿';
+      default:           return '🛠️';
     }
   }
 
-  Widget _empty(String emoji, String title, String subtitle) =>
+  Widget _empty(
+      String emoji, String title, String subtitle) =>
       Padding(
         padding: const EdgeInsets.all(40),
         child: Column(children: [
-          Text(emoji, style: const TextStyle(fontSize: 48)),
+          Text(emoji,
+              style: const TextStyle(fontSize: 48)),
           const SizedBox(height: 16),
           Text(title,
               style: const TextStyle(
@@ -1328,13 +1539,17 @@ class _WorkerDashboardState extends State<WorkerDashboard>
         ]),
       );
 
+  // ── Bottom nav ─────────────────────────────────────────────────────────────
   Widget _buildBottomNav() {
     return Container(
       decoration: BoxDecoration(
           color: kCardBg,
-          border: Border(top: BorderSide(color: kBorder, width: 1))),
+          border:
+              Border(top: BorderSide(color: kBorder, width: 1))),
       padding: EdgeInsets.only(
-          bottom: MediaQuery.of(context).padding.bottom + 8, top: 8),
+          bottom:
+              MediaQuery.of(context).padding.bottom + 8,
+          top: 8),
       child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceAround,
           children: [
@@ -1358,12 +1573,15 @@ class _WorkerDashboardState extends State<WorkerDashboard>
                     : Colors.transparent,
                 borderRadius: BorderRadius.circular(12)),
             child: Icon(icon,
-                color: active ? kAccentGreen : kTextSecondary,
+                color:
+                    active ? kAccentGreen : kTextSecondary,
                 size: 22)),
         const SizedBox(height: 2),
         Text(label,
             style: TextStyle(
-                color: active ? kAccentGreen : kTextSecondary,
+                color: active
+                    ? kAccentGreen
+                    : kTextSecondary,
                 fontSize: 11,
                 fontWeight: active
                     ? FontWeight.w700

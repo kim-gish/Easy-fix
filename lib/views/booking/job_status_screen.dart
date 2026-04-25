@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'rating_sheet.dart';
+import 'review_screen.dart';
 
 const Color kPrimaryGreen  = Color(0xFF1A7A4A);
 const Color kAccentGreen   = Color(0xFF25A865);
@@ -11,9 +13,17 @@ const Color kBorder        = Color(0xFF2E2E2E);
 const Color kTextPrimary   = Color(0xFFFFFFFF);
 const Color kTextSecondary = Color(0xFF9E9E9E);
 
-class JobStatusScreen extends StatelessWidget {
+class JobStatusScreen extends StatefulWidget {
   final String jobId;
   const JobStatusScreen({super.key, required this.jobId});
+
+  @override
+  State<JobStatusScreen> createState() => _JobStatusScreenState();
+}
+
+class _JobStatusScreenState extends State<JobStatusScreen> {
+  // Prevent auto-sheet from firing more than once per session
+  bool _ratingSheetShown = false;
 
   String _categoryEmoji(String category) {
     switch (category.toLowerCase()) {
@@ -58,28 +68,73 @@ class JobStatusScreen extends StatelessWidget {
     }
   }
 
+  // ── Fetch the current user's review for this job ───────────────────────────
+  Future<QueryDocumentSnapshot?> _fetchExistingReview() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return null;
+    try {
+      final snap = await FirebaseFirestore.instance
+          .collection('Reviews')
+          .where('jobId', isEqualTo: widget.jobId)
+          .where('customerId', isEqualTo: uid)
+          .limit(1)
+          .get();
+      return snap.docs.isNotEmpty ? snap.docs.first : null;
+    } catch (e) {
+      debugPrint('Fetch review error: $e');
+      return null;
+    }
+  }
+
+  // ── Auto-show rating sheet once when job completes and not yet rated ────────
+  void _maybeShowRatingSheet(Map<String, dynamic> data) {
+    if (_ratingSheetShown) return;
+    _ratingSheetShown = true;
+
+    Future.delayed(const Duration(milliseconds: 800), () {
+      if (!mounted) return;
+      showRatingSheet(
+        context,
+        jobId:      widget.jobId,
+        workerId:   data['workerId']?.toString() ?? '',
+        workerName: data['workerName']?.toString() ?? 'Worker',
+      );
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: kDarkBg,
       body: StreamBuilder<DocumentSnapshot>(
         stream: FirebaseFirestore.instance
-            .collection('jobs').doc(jobId).snapshots(),
+            .collection('jobs')
+            .doc(widget.jobId)
+            .snapshots(),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator(
-                color: kAccentGreen));
+            return const Center(
+                child: CircularProgressIndicator(color: kAccentGreen));
           }
           if (!snapshot.hasData || !snapshot.data!.exists) {
-            return const Center(child: Text('Job not found',
-                style: TextStyle(color: kTextSecondary)));
+            return const Center(
+                child: Text('Job not found',
+                    style: TextStyle(color: kTextSecondary)));
           }
 
-          final data = snapshot.data!.data() as Map<String, dynamic>;
-          final status = data['status'] ?? 'pending';
+          final data   = snapshot.data!.data() as Map<String, dynamic>;
+          final status = data['status']?.toString() ?? 'pending';
+          final rated  = data['rated'] as bool? ?? false;
+
+          // Auto-trigger rating sheet when completed and not yet rated
+          if (status == 'completed' && !rated) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              _maybeShowRatingSheet(data);
+            });
+          }
 
           return Column(children: [
-            // ── Header
+            // ── Header ──────────────────────────────────────────────────
             Container(
               decoration: const BoxDecoration(
                 gradient: LinearGradient(
@@ -110,19 +165,23 @@ class JobStatusScreen extends StatelessWidget {
                     ),
                     const SizedBox(width: 14),
                     const Text('Job Status',
-                      style: TextStyle(color: Colors.white,
-                        fontSize: 18, fontWeight: FontWeight.w800)),
+                        style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 18,
+                            fontWeight: FontWeight.w800)),
                   ]),
                 ),
               ),
             ),
 
+            // ── Body ────────────────────────────────────────────────────
             Expanded(
               child: SingleChildScrollView(
                 physics: const BouncingScrollPhysics(),
                 padding: const EdgeInsets.all(16),
                 child: Column(children: [
-                  // ── Status card
+
+                  // ── Status card ────────────────────────────────────────
                   Container(
                     width: double.infinity,
                     padding: const EdgeInsets.all(24),
@@ -133,22 +192,21 @@ class JobStatusScreen extends StatelessWidget {
                           color: _statusColor(status).withOpacity(0.3)),
                       boxShadow: [BoxShadow(
                           color: _statusColor(status).withOpacity(0.1),
-                          blurRadius: 20, offset: const Offset(0, 6))],
+                          blurRadius: 20,
+                          offset: const Offset(0, 6))],
                     ),
                     child: Column(children: [
-                      // Status emoji + pulse for pending
                       status == 'pending'
                           ? _PulsingIcon(emoji: _statusEmoji(status))
                           : Text(_statusEmoji(status),
                               style: const TextStyle(fontSize: 52)),
                       const SizedBox(height: 16),
                       Text(_statusLabel(status),
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          color: _statusColor(status),
-                          fontSize: 20,
-                          fontWeight: FontWeight.w800,
-                        )),
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                              color: _statusColor(status),
+                              fontSize: 20,
+                              fontWeight: FontWeight.w800)),
                       const SizedBox(height: 6),
                       Text(
                         status == 'pending'
@@ -161,14 +219,15 @@ class JobStatusScreen extends StatelessWidget {
                         textAlign: TextAlign.center,
                         style: const TextStyle(
                             color: kTextSecondary,
-                            fontSize: 14, height: 1.5),
+                            fontSize: 14,
+                            height: 1.5),
                       ),
                     ]),
                   ),
 
                   const SizedBox(height: 16),
 
-                  // ── Progress timeline
+                  // ── Progress timeline ──────────────────────────────────
                   Container(
                     padding: const EdgeInsets.all(20),
                     decoration: BoxDecoration(
@@ -177,19 +236,22 @@ class JobStatusScreen extends StatelessWidget {
                       border: Border.all(color: kBorder),
                     ),
                     child: Column(children: [
-                      _timelineStep('📤', 'Request Sent',
+                      _timelineStep(
+                          '📤', 'Request Sent',
                           'Your booking was submitted',
                           true, false),
                       _timelineLine(status == 'accepted' ||
                           status == 'completed'),
-                      _timelineStep('🤝', 'Worker Accepted',
+                      _timelineStep(
+                          '🤝', 'Worker Accepted',
                           status == 'accepted' || status == 'completed'
-                              ? '${data['workerName']} accepted'
+                              ? '${data['workerName'] ?? 'Worker'} accepted'
                               : 'Waiting for response',
                           status == 'accepted' || status == 'completed',
                           status == 'pending'),
                       _timelineLine(status == 'completed'),
-                      _timelineStep('✅', 'Job Completed',
+                      _timelineStep(
+                          '✅', 'Job Completed',
                           status == 'completed'
                               ? 'Job done successfully'
                               : 'In progress',
@@ -200,7 +262,7 @@ class JobStatusScreen extends StatelessWidget {
 
                   const SizedBox(height: 16),
 
-                  // ── Job details
+                  // ── Job details ────────────────────────────────────────
                   Container(
                     padding: const EdgeInsets.all(20),
                     decoration: BoxDecoration(
@@ -216,11 +278,10 @@ class JobStatusScreen extends StatelessWidget {
                               style: const TextStyle(fontSize: 20)),
                           const SizedBox(width: 10),
                           Text(data['category'] ?? 'Job Details',
-                            style: const TextStyle(
-                              color: kTextPrimary,
-                              fontSize: 16,
-                              fontWeight: FontWeight.w800,
-                            )),
+                              style: const TextStyle(
+                                  color: kTextPrimary,
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w800)),
                         ]),
                         const SizedBox(height: 16),
                         _detailRow('👷', 'Worker',
@@ -239,24 +300,85 @@ class JobStatusScreen extends StatelessWidget {
                             data['budget'] ?? 'Negotiable'),
                         _divider(),
                         _detailRow('🔖', 'Job ID',
-                            jobId.substring(0, 8).toUpperCase()),
+                            widget.jobId.substring(0, 8).toUpperCase()),
                       ],
                     ),
                   ),
 
                   const SizedBox(height: 16),
 
-                  // ── Action button based on status
+                  // ── Action buttons ─────────────────────────────────────
                   if (status == 'completed')
-                    _actionBtn('Rate Worker ⭐', kPrimaryGreen, () {}),
+                    FutureBuilder<QueryDocumentSnapshot?>(
+                      future: _fetchExistingReview(),
+                      builder: (context, reviewSnap) {
+                        final existingReview = reviewSnap.data;
+                        final hasReview      = existingReview != null;
+                        final reviewData     = hasReview
+                            ? existingReview.data() as Map<String, dynamic>
+                            : null;
+
+                        return Column(children: [
+                          // Rate or Edit review
+                          _actionBtn(
+                            hasReview
+                                ? 'Edit Your Review ✏️'
+                                : 'Rate Worker ⭐',
+                            kPrimaryGreen,
+                            () => showRatingSheet(
+                              context,
+                              jobId:      widget.jobId,
+                              workerId:
+                                  data['workerId']?.toString() ?? '',
+                              workerName:
+                                  data['workerName']?.toString() ??
+                                      'Worker',
+                              existingReviewId:
+                                  hasReview ? existingReview.id : null,
+                              existingRating: hasReview
+                                  ? (reviewData!['rating'] as int? ?? 0)
+                                  : 0,
+                              existingComment: hasReview
+                                  ? (reviewData!['comment']
+                                          ?.toString() ??
+                                      '')
+                                  : '',
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+
+                          // View all reviews
+                          _outlineBtn(
+                            'View All Reviews',
+                            () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => ReviewsScreen(
+                                  workerId: data['workerId']
+                                          ?.toString() ??
+                                      '',
+                                  workerName: data['workerName']
+                                          ?.toString() ??
+                                      'Worker',
+                                ),
+                              ),
+                            ),
+                          ),
+                        ]);
+                      },
+                    ),
+
                   if (status == 'declined')
                     _actionBtn('Find Another Worker', kPrimaryGreen,
-                            () => Navigator.pop(context)),
+                        () => Navigator.pop(context)),
+
                   if (status == 'pending')
-                    _actionBtn('Cancel Request', const Color(0xFF333333),
-                        () async {
+                    _actionBtn(
+                        'Cancel Request',
+                        const Color(0xFF333333), () async {
                       await FirebaseFirestore.instance
-                          .collection('jobs').doc(jobId)
+                          .collection('jobs')
+                          .doc(widget.jobId)
                           .update({'status': 'cancelled'});
                       if (context.mounted) Navigator.pop(context);
                     }),
@@ -271,35 +393,35 @@ class JobStatusScreen extends StatelessWidget {
     );
   }
 
+  // ── Helper widgets ─────────────────────────────────────────────────────────
+
   Widget _timelineStep(String emoji, String title, String subtitle,
       bool done, bool pending) {
     return Row(children: [
       Container(
         width: 40, height: 40,
         decoration: BoxDecoration(
-          color: done
-              ? kPrimaryGreen.withOpacity(0.15)
-              : kSurfaceBg,
+          color: done ? kPrimaryGreen.withOpacity(0.15) : kSurfaceBg,
           shape: BoxShape.circle,
           border: Border.all(
-            color: done ? kAccentGreen : kBorder,
-            width: done ? 1.5 : 1,
-          ),
+              color: done ? kAccentGreen : kBorder,
+              width: done ? 1.5 : 1),
         ),
-        child: Center(child: Text(emoji,
-            style: const TextStyle(fontSize: 16))),
+        child: Center(
+            child: Text(emoji,
+                style: const TextStyle(fontSize: 16))),
       ),
       const SizedBox(width: 12),
       Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Text(title,
-          style: TextStyle(
-            color: done ? kTextPrimary : kTextSecondary,
-            fontSize: 14,
-            fontWeight: done ? FontWeight.w700 : FontWeight.w500,
-          )),
+            style: TextStyle(
+                color: done ? kTextPrimary : kTextSecondary,
+                fontSize: 14,
+                fontWeight:
+                    done ? FontWeight.w700 : FontWeight.w500)),
         Text(subtitle,
-          style: const TextStyle(
-              color: kTextSecondary, fontSize: 12)),
+            style: const TextStyle(
+                color: kTextSecondary, fontSize: 12)),
       ]),
     ]);
   }
@@ -308,38 +430,39 @@ class JobStatusScreen extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(left: 19, top: 2, bottom: 2),
       child: Container(
-        width: 2, height: 24,
-        color: active ? kAccentGreen : kBorder,
-      ),
+          width: 2,
+          height: 24,
+          color: active ? kAccentGreen : kBorder),
     );
   }
 
   Widget _detailRow(String emoji, String label, String value) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 10),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(emoji, style: const TextStyle(fontSize: 15)),
-          const SizedBox(width: 10),
-          Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(label, style: const TextStyle(
-                color: kTextSecondary, fontSize: 11)),
-            const SizedBox(height: 2),
-            SizedBox(
-              width: 260,
-              child: Text(value, style: const TextStyle(
-                color: kTextPrimary,
-                fontSize: 14, fontWeight: FontWeight.w600)),
-            ),
-          ]),
-        ],
-      ),
+      child: Row(crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+        Text(emoji, style: const TextStyle(fontSize: 15)),
+        const SizedBox(width: 10),
+        Column(crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+          Text(label,
+              style: const TextStyle(
+                  color: kTextSecondary, fontSize: 11)),
+          const SizedBox(height: 2),
+          SizedBox(
+            width: 260,
+            child: Text(value,
+                style: const TextStyle(
+                    color: kTextPrimary,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600)),
+          ),
+        ]),
+      ]),
     );
   }
 
-  Widget _divider() =>
-      Container(height: 1, color: kBorder);
+  Widget _divider() => Container(height: 1, color: kBorder);
 
   Widget _actionBtn(String label, Color color, VoidCallback onTap) {
     return GestureDetector(
@@ -347,15 +470,42 @@ class JobStatusScreen extends StatelessWidget {
       child: Container(
         width: double.infinity, height: 54,
         decoration: BoxDecoration(
-          color: color,
+          gradient: LinearGradient(
+              colors: [color, color.withOpacity(0.85)],
+              begin: Alignment.centerLeft,
+              end: Alignment.centerRight),
           borderRadius: BorderRadius.circular(16),
           boxShadow: [BoxShadow(
               color: color.withOpacity(0.3),
-              blurRadius: 14, offset: const Offset(0, 6))],
+              blurRadius: 14,
+              offset: const Offset(0, 6))],
         ),
-        child: Center(child: Text(label,
-          style: const TextStyle(color: Colors.white,
-              fontSize: 15, fontWeight: FontWeight.w700))),
+        child: Center(
+            child: Text(label,
+                style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700))),
+      ),
+    );
+  }
+
+  Widget _outlineBtn(String label, VoidCallback onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: double.infinity, height: 54,
+        decoration: BoxDecoration(
+          color: kSurfaceBg,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: kBorder),
+        ),
+        child: Center(
+            child: Text(label,
+                style: const TextStyle(
+                    color: kTextSecondary,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700))),
       ),
     );
   }
@@ -365,6 +515,7 @@ class JobStatusScreen extends StatelessWidget {
 class _PulsingIcon extends StatefulWidget {
   final String emoji;
   const _PulsingIcon({required this.emoji});
+
   @override
   State<_PulsingIcon> createState() => _PulsingIconState();
 }
@@ -372,7 +523,7 @@ class _PulsingIcon extends StatefulWidget {
 class _PulsingIconState extends State<_PulsingIcon>
     with SingleTickerProviderStateMixin {
   late AnimationController _ctrl;
-  late Animation<double> _anim;
+  late Animation<double>   _anim;
 
   @override
   void initState() {
@@ -380,19 +531,21 @@ class _PulsingIconState extends State<_PulsingIcon>
     _ctrl = AnimationController(
         vsync: this, duration: const Duration(seconds: 1))
       ..repeat(reverse: true);
-    _anim = Tween<double>(begin: 0.8, end: 1.0)
-        .animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut));
+    _anim = Tween<double>(begin: 0.8, end: 1.0).animate(
+        CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut));
   }
 
   @override
-  void dispose() { _ctrl.dispose(); super.dispose(); }
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     return ScaleTransition(
-      scale: _anim,
-      child: Text(widget.emoji,
-          style: const TextStyle(fontSize: 52)),
-    );
+        scale: _anim,
+        child: Text(widget.emoji,
+            style: const TextStyle(fontSize: 52)));
   }
 }
