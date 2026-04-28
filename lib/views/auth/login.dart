@@ -6,6 +6,7 @@ import 'package:google_sign_in/google_sign_in.dart';
 import '../customer/home_dashboard.dart';
 import '../worker/worker_register.dart';
 import '../worker/worker_dashboard.dart';
+import '../admin/admin_dashboard.dart';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const Color kPrimaryGreen  = Color(0xFF1A7A4A);
@@ -16,6 +17,9 @@ const Color kSurfaceBg     = Color(0xFF242424);
 const Color kBorder        = Color(0xFF2E2E2E);
 const Color kTextPrimary   = Color(0xFFFFFFFF);
 const Color kTextSecondary = Color(0xFF9E9E9E);
+
+// ── Admin PIN — change this to update the PIN ─────────────────────────────────
+const String kAdminPin = '433215';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -32,7 +36,7 @@ class _LoginScreenState extends State<LoginScreen>
   bool _isLoading       = false;
   String? _errorMessage;
 
-  // ── Google Sign In instance — declared once at class level
+  // ── Google Sign In
   final GoogleSignIn _googleSignIn = GoogleSignIn.instance;
 
   // ── Controllers
@@ -107,80 +111,433 @@ class _LoginScreenState extends State<LoginScreen>
       (route) => false,
     );
   }
-  // ── Navigate to Worker Dashboard ───────────────────────────────────────────────
+
+  // ── Navigate to Worker Dashboard ───────────────────────────────────────────
   void _navigateToWorkerDashboard() {
-  Navigator.of(context).pushAndRemoveUntil(
-    MaterialPageRoute(builder: (context) => WorkerDashboard()),
-    (route) => false,
-  );
-}
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (context) => WorkerDashboard()),
+      (route) => false,
+    );
+  }
+
+  // ── Navigate to Admin Dashboard ────────────────────────────────────────────
+  void _navigateToAdminDashboard() {
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (context) => const AdminDashboard()),
+      (route) => false,
+    );
+  }
+
+  // ── Long press logo → show PIN dialog ─────────────────────────────────────
+  void _onLogoPressLong() {
+    HapticFeedback.mediumImpact();
+    _showPinDialog();
+  }
+
+  void _showPinDialog() {
+    final pinCtrl   = TextEditingController();
+    bool  pinError  = false;
+    bool  obscurePin = true;
+
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          backgroundColor: kCardBg,
+          shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20)),
+          title: const Column(children: [
+            Text('🔐', style: TextStyle(fontSize: 32)),
+            SizedBox(height: 8),
+            Text('Admin Access',
+                style: TextStyle(
+                    color: kTextPrimary,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w800)),
+          ]),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('Enter admin PIN to continue',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                      color: kTextSecondary, fontSize: 13)),
+              const SizedBox(height: 20),
+              // PIN input
+              Container(
+                decoration: BoxDecoration(
+                  color: kSurfaceBg,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                      color: pinError
+                          ? const Color(0xFFFF4444)
+                          : kBorder),
+                ),
+                child: TextField(
+                  controller: pinCtrl,
+                  keyboardType: TextInputType.number,
+                  obscureText: obscurePin,
+                  maxLength: 6,
+                  inputFormatters: [
+                    FilteringTextInputFormatter.digitsOnly
+                  ],
+                  style: const TextStyle(
+                      color: kTextPrimary,
+                      fontSize: 22,
+                      letterSpacing: 8,
+                      fontWeight: FontWeight.w700),
+                  textAlign: TextAlign.center,
+                  decoration: InputDecoration(
+                    counterText: '',
+                    hintText: '• • • • • •',
+                    hintStyle: const TextStyle(
+                        color: Color(0xFF555555),
+                        fontSize: 18,
+                        letterSpacing: 6),
+                    border: InputBorder.none,
+                    contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 14),
+                    suffixIcon: IconButton(
+                      icon: Icon(
+                        obscurePin
+                            ? Icons.visibility_off_outlined
+                            : Icons.visibility_outlined,
+                        color: kTextSecondary,
+                        size: 18,
+                      ),
+                      onPressed: () =>
+                          setDialogState(() => obscurePin = !obscurePin),
+                    ),
+                  ),
+                ),
+              ),
+              if (pinError) ...[
+                const SizedBox(height: 8),
+                const Text('Incorrect PIN. Try again.',
+                    style: TextStyle(
+                        color: Color(0xFFFF6B6B),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500)),
+              ],
+            ],
+          ),
+          actions: [
+            // Cancel
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel',
+                  style: TextStyle(
+                      color: kTextSecondary, fontSize: 14)),
+            ),
+            // Confirm
+            GestureDetector(
+              onTap: () {
+                if (pinCtrl.text.trim() == kAdminPin) {
+                  Navigator.pop(ctx);
+                  // PIN correct → show admin Firebase login
+                  _showAdminLoginDialog();
+                } else {
+                  setDialogState(() => pinError = true);
+                  HapticFeedback.vibrate();
+                }
+              },
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 20, vertical: 10),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                      colors: [kPrimaryGreen, kAccentGreen]),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Text('Confirm',
+                    style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700)),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ── Admin Firebase login dialog ────────────────────────────────────────────
+  void _showAdminLoginDialog() {
+    final emailCtrl    = TextEditingController();
+    final passwordCtrl = TextEditingController();
+    bool  isLoading    = false;
+    bool  obscure      = true;
+    String? error;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          backgroundColor: kCardBg,
+          shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20)),
+          title: const Column(children: [
+            Text('👤', style: TextStyle(fontSize: 32)),
+            SizedBox(height: 8),
+            Text('Admin Login',
+                style: TextStyle(
+                    color: kTextPrimary,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w800)),
+          ]),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Email
+              Container(
+                decoration: BoxDecoration(
+                    color: kSurfaceBg,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: kBorder)),
+                child: TextField(
+                  controller: emailCtrl,
+                  keyboardType: TextInputType.emailAddress,
+                  style: const TextStyle(
+                      color: kTextPrimary, fontSize: 14),
+                  decoration: const InputDecoration(
+                    hintText: 'Admin email',
+                    hintStyle:
+                        TextStyle(color: Color(0xFF555555)),
+                    prefixIcon: Icon(Icons.mail_outline_rounded,
+                        color: Color(0xFF555555), size: 18),
+                    border: InputBorder.none,
+                    contentPadding: EdgeInsets.symmetric(
+                        horizontal: 14, vertical: 14),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              // Password
+              Container(
+                decoration: BoxDecoration(
+                    color: kSurfaceBg,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: kBorder)),
+                child: TextField(
+                  controller: passwordCtrl,
+                  obscureText: obscure,
+                  style: const TextStyle(
+                      color: kTextPrimary, fontSize: 14),
+                  decoration: InputDecoration(
+                    hintText: 'Password',
+                    hintStyle: const TextStyle(
+                        color: Color(0xFF555555)),
+                    prefixIcon: const Icon(
+                        Icons.lock_outline_rounded,
+                        color: Color(0xFF555555),
+                        size: 18),
+                    suffixIcon: IconButton(
+                      icon: Icon(
+                        obscure
+                            ? Icons.visibility_off_outlined
+                            : Icons.visibility_outlined,
+                        color: kTextSecondary,
+                        size: 18,
+                      ),
+                      onPressed: () =>
+                          setDialogState(() => obscure = !obscure),
+                    ),
+                    border: InputBorder.none,
+                    contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 14, vertical: 14),
+                  ),
+                ),
+              ),
+              if (error != null) ...[
+                const SizedBox(height: 10),
+                Text(error!,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                        color: Color(0xFFFF6B6B),
+                        fontSize: 12)),
+              ],
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: isLoading ? null : () => Navigator.pop(ctx),
+              child: const Text('Cancel',
+                  style: TextStyle(
+                      color: kTextSecondary, fontSize: 14)),
+            ),
+            GestureDetector(
+              onTap: isLoading
+                  ? null
+                  : () async {
+                      if (emailCtrl.text.trim().isEmpty ||
+                          passwordCtrl.text.trim().isEmpty) {
+                        setDialogState(() =>
+                            error = 'Please fill in all fields');
+                        return;
+                      }
+
+                      setDialogState(() {
+                        isLoading = true;
+                        error     = null;
+                      });
+
+                      try {
+                        // Sign in with Firebase
+                        final credential = await FirebaseAuth
+                            .instance
+                            .signInWithEmailAndPassword(
+                          email:
+                              emailCtrl.text.trim(),
+                          password:
+                              passwordCtrl.text.trim(),
+                        );
+
+                        final uid =
+                            credential.user?.uid ?? '';
+
+                        // Check admins collection
+                        final adminDoc =
+                            await FirebaseFirestore.instance
+                                .collection('admins')
+                                .doc(uid)
+                                .get();
+
+                        if (adminDoc.exists) {
+                          if (ctx.mounted) {
+                            Navigator.pop(ctx);
+                          }
+                          if (mounted) {
+                            _navigateToAdminDashboard();
+                          }
+                        } else {
+                          // Not an admin — sign out
+                          await FirebaseAuth.instance
+                              .signOut();
+                          setDialogState(() {
+                            isLoading = false;
+                            error =
+                                'Access denied. Not an admin account.';
+                          });
+                        }
+                      } on FirebaseAuthException catch (e) {
+                        setDialogState(() {
+                          isLoading = false;
+                          error =
+                              _friendlyError(e.code);
+                        });
+                      } catch (e) {
+                        setDialogState(() {
+                          isLoading = false;
+                          error =
+                              'Login failed. Try again.';
+                        });
+                      }
+                    },
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 20, vertical: 10),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                      colors: [kPrimaryGreen, kAccentGreen]),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: isLoading
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                            color: Colors.white,
+                            strokeWidth: 2))
+                    : const Text('Login',
+                        style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700)),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
   // ── Sign In ────────────────────────────────────────────────────────────────
-Future<void> _signIn() async {
-  if (!_formKey.currentState!.validate()) return;
-  setState(() { _isLoading = true; _errorMessage = null; });
+  Future<void> _signIn() async {
+    if (!_formKey.currentState!.validate()) return;
+    setState(() { _isLoading = true; _errorMessage = null; });
 
-  try {
-    // 1. Sign in with Auth
-    UserCredential userCredential = await FirebaseAuth.instance.signInWithEmailAndPassword(
-      email:    _emailController.text.trim(),
-      password: _passwordController.text.trim(),
-    );
+    try {
+      final userCredential = await FirebaseAuth.instance
+          .signInWithEmailAndPassword(
+        email:    _emailController.text.trim(),
+        password: _passwordController.text.trim(),
+      );
 
-    if (userCredential.user != null && mounted) {
-      String uid = userCredential.user!.uid;
+      if (userCredential.user != null && mounted) {
+        final uid = userCredential.user!.uid;
 
-      // 2. CHECK WORKERS COLLECTION
-      final workerDoc = await FirebaseFirestore.instance
-          .collection('workers')
-          .doc(uid)
-          .get();
+        // Check workers collection
+        final workerDoc = await FirebaseFirestore.instance
+            .collection('workers')
+            .doc(uid)
+            .get();
 
-      if (workerDoc.exists) {
-        if (mounted) _navigateToWorkerDashboard();
-        return; // Success - Exit
+        if (workerDoc.exists) {
+          // Check if worker is approved
+          final approved =
+              workerDoc.data()?['approved'] as bool? ?? false;
+          if (!approved) {
+            await FirebaseAuth.instance.signOut();
+            setState(() => _errorMessage =
+                'Your account is pending admin approval. Please wait.');
+            return;
+          }
+          if (mounted) _navigateToWorkerDashboard();
+          return;
+        }
+
+        // Check users collection
+        final userDoc = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(uid)
+            .get();
+
+        if (userDoc.exists) {
+          if (mounted) _goHome();
+          return;
+        }
+
+        setState(() =>
+            _errorMessage = 'User data not found. Please contact support.');
       }
-
-      // 3. CHECK USERS (CUSTOMERS) COLLECTION
-      final userDoc = await FirebaseFirestore.instance
-          .collection('users') // Make sure this matches your screenshot name
-          .doc(uid)
-          .get();
-
-      if (userDoc.exists) {
-        if (mounted) _goHome(); // Customer home
-        return; // Success - Exit
-      }
-
-      // 4. Fallback if UID exists in Auth but not in any collection
-      // (This happens if you deleted a document manually but kept the Auth user)
-      setState(() => _errorMessage = "User data not found. Please contact support.");
-      
+    } on FirebaseAuthException catch (e) {
+      setState(() => _errorMessage = _friendlyError(e.code));
+    } catch (e) {
+      debugPrint('Login Error: $e');
+      setState(() => _errorMessage = 'Login failed. Check your internet.');
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
     }
-  } on FirebaseAuthException catch (e) {
-    setState(() => _errorMessage = _friendlyError(e.code));
-  } catch (e) {
-    debugPrint("Login Error: $e");
-    setState(() => _errorMessage = "Login failed. Check your internet.");
-  } finally {
-    if (mounted) setState(() => _isLoading = false);
   }
-}
+
   // ── Sign Up ────────────────────────────────────────────────────────────────
   Future<void> _signUp() async {
     if (!_formKey.currentState!.validate()) return;
     setState(() { _isLoading = true; _errorMessage = null; });
 
     try {
-      // 1. Create Auth Account
-      final credential = await FirebaseAuth.instance.createUserWithEmailAndPassword(
+      final credential = await FirebaseAuth.instance
+          .createUserWithEmailAndPassword(
         email:    _emailController.text.trim(),
         password: _passwordController.text.trim(),
       );
-      
-      await credential.user?.updateDisplayName(_nameController.text.trim());
 
-      // 2. Save user to Firestore
+      await credential.user
+          ?.updateDisplayName(_nameController.text.trim());
+
       await FirebaseFirestore.instance
           .collection('users')
           .doc(credential.user!.uid)
@@ -188,65 +545,51 @@ Future<void> _signIn() async {
         'name':      _nameController.text.trim(),
         'phone':     _phoneController.text.trim(),
         'email':     _emailController.text.trim(),
-        'role':      'customer', // Added for your login logic
+        'role':      'customer',
         'photoUrl':  '',
         'rating':    0,
-        'createdAt': FieldValue.serverTimestamp(), // Better for sorting
+        'createdAt': FieldValue.serverTimestamp(),
       });
 
       if (mounted) _goHome();
-
-    // ─── START OF THE IMPLEMENTATION ───
     } on FirebaseAuthException catch (e) {
-      // Catches Auth-specific errors (e.g. email already in use)
       setState(() => _errorMessage = _friendlyError(e.code));
     } catch (e) {
-      // Catches EVERYTHING else (Firestore permission errors, timeout, etc.)
-      debugPrint("Firestore Error: $e"); 
-      setState(() => _errorMessage = "Account created, but profile failed to save.");
+      debugPrint('Firestore Error: $e');
+      setState(() => _errorMessage =
+          'Account created, but profile failed to save.');
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
-    // ─── END OF THE IMPLEMENTATION ───
   }
 
-  // ── Google Sign In — FIXED for google_sign_in 6.x ─────────────────────────
+  // ── Google Sign In ─────────────────────────────────────────────────────────
   Future<void> _signInWithGoogle() async {
     setState(() { _isLoading = true; _errorMessage = null; });
     try {
-      // Step 1: Trigger the Google sign-in flow
       final GoogleSignInAccount googleUser =
           await _googleSignIn.authenticate();
 
-      // User cancelled
-      if (googleUser == null) {
-        setState(() => _isLoading = false);
-        return;
-      }
-
-      // Step 2: Get the auth tokens from the google user
       final GoogleSignInAuthentication googleAuth =
           googleUser.authentication;
 
-      // Step 3: Build Firebase credential using the tokens
-      // Note: accessToken can be null on some platforms — idToken is primary
       final OAuthCredential firebaseCredential =
           GoogleAuthProvider.credential(
         idToken:     googleAuth.idToken,
         accessToken: googleAuth.accessToken,
       );
 
-      // Step 4: Sign in to Firebase with the credential
-      final UserCredential userCredential = await FirebaseAuth.instance
+      final UserCredential userCredential = await FirebaseAuth
+          .instance
           .signInWithCredential(firebaseCredential);
 
       final User? user = userCredential.user;
       if (user == null) {
-        setState(() => _errorMessage = 'Google sign in failed. Try again.');
+        setState(
+            () => _errorMessage = 'Google sign in failed. Try again.');
         return;
       }
 
-      // Step 5: Save to Firestore if new user
       final docRef = FirebaseFirestore.instance
           .collection('users')
           .doc(user.uid);
@@ -264,7 +607,6 @@ Future<void> _signIn() async {
       }
 
       if (mounted) _goHome();
-
     } on FirebaseAuthException catch (e) {
       setState(() => _errorMessage = _friendlyError(e.code));
     } catch (e) {
@@ -310,7 +652,8 @@ Future<void> _signIn() async {
       content: Text(msg, style: const TextStyle(color: Colors.white)),
       backgroundColor: kPrimaryGreen,
       behavior: SnackBarBehavior.floating,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12)),
       margin: const EdgeInsets.all(16),
     ));
   }
@@ -370,39 +713,46 @@ Future<void> _signIn() async {
                   children: [
                     // ── Header
                     Padding(
-                      padding: const EdgeInsets.fromLTRB(28, 24, 28, 0),
+                      padding:
+                          const EdgeInsets.fromLTRB(28, 24, 28, 0),
                       child: FadeTransition(
                         opacity: _fadeAnim,
                         child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                          crossAxisAlignment:
+                              CrossAxisAlignment.start,
                           children: [
-                            // Logo
-                            Row(children: [
-                              Container(
-                                width: 42, height: 42,
-                                decoration: BoxDecoration(
-                                  color: Colors.white,
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: const Center(
-                                  child: Text('EF',
-                                    style: TextStyle(
-                                      color: kPrimaryGreen,
-                                      fontWeight: FontWeight.w800,
-                                      fontSize: 16,
-                                      letterSpacing: -0.5,
-                                    )),
-                                ),
-                              ),
-                              const SizedBox(width: 10),
-                              const Text('EasyFix',
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 20,
-                                  fontWeight: FontWeight.w700,
-                                  letterSpacing: -0.5,
-                                )),
-                            ]),
+                            // ── Logo with long press for admin ────
+                           // ── Logo with long press for admin ────
+GestureDetector(
+  onLongPress: _onLogoPressLong,
+  behavior: HitTestBehavior.opaque,  // ← this is the fix
+  child: Row(children: [
+    Container(
+      width: 42, height: 42,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: const Center(
+        child: Text('EF',
+            style: TextStyle(
+              color: kPrimaryGreen,
+              fontWeight: FontWeight.w800,
+              fontSize: 16,
+              letterSpacing: -0.5,
+            )),
+      ),
+    ),
+    const SizedBox(width: 10),
+    const Text('EasyFix',
+        style: TextStyle(
+          color: Colors.white,
+          fontSize: 20,
+          fontWeight: FontWeight.w700,
+          letterSpacing: -0.5,
+        )),
+  ]),
+),
 
                             const SizedBox(height: 40),
 
@@ -443,18 +793,20 @@ Future<void> _signIn() async {
                       child: FadeTransition(
                         opacity: _fadeAnim,
                         child: Container(
-                          margin: const EdgeInsets.symmetric(horizontal: 16),
+                          margin: const EdgeInsets.symmetric(
+                              horizontal: 16),
                           decoration: BoxDecoration(
                             color: kCardBg,
-                            borderRadius: BorderRadius.circular(28),
+                            borderRadius:
+                                BorderRadius.circular(28),
                             border: Border.all(color: kBorder),
                           ),
                           child: Padding(
                             padding: const EdgeInsets.all(24),
                             child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
+                              crossAxisAlignment:
+                                  CrossAxisAlignment.start,
                               children: [
-                                // Tabs
                                 _buildTabs(),
                                 const SizedBox(height: 28),
 
@@ -465,7 +817,8 @@ Future<void> _signIn() async {
                                   _buildField(
                                     controller: _nameController,
                                     hint: 'John Kamau',
-                                    icon: Icons.person_outline_rounded,
+                                    icon: Icons
+                                        .person_outline_rounded,
                                     validator: (v) =>
                                         (v == null || v.isEmpty)
                                             ? 'Enter your name'
@@ -478,7 +831,8 @@ Future<void> _signIn() async {
                                     controller: _phoneController,
                                     hint: '+254 712 345 678',
                                     icon: Icons.phone_outlined,
-                                    keyboard: TextInputType.phone,
+                                    keyboard:
+                                        TextInputType.phone,
                                     validator: (v) =>
                                         (v == null || v.isEmpty)
                                             ? 'Enter your phone'
@@ -487,16 +841,18 @@ Future<void> _signIn() async {
                                   const SizedBox(height: 18),
                                 ],
 
-                                // Email
                                 _buildLabel('Email Address'),
                                 const SizedBox(height: 8),
                                 _buildField(
                                   controller: _emailController,
                                   hint: 'you@gmail.com',
-                                  icon: Icons.mail_outline_rounded,
-                                  keyboard: TextInputType.emailAddress,
+                                  icon: Icons
+                                      .mail_outline_rounded,
+                                  keyboard: TextInputType
+                                      .emailAddress,
                                   validator: (v) {
-                                    if (v == null || v.isEmpty) {
+                                    if (v == null ||
+                                        v.isEmpty) {
                                       return 'Enter your email';
                                     }
                                     if (!v.contains('@')) {
@@ -507,7 +863,6 @@ Future<void> _signIn() async {
                                 ),
                                 const SizedBox(height: 18),
 
-                                // Password
                                 _buildLabel('Password'),
                                 const SizedBox(height: 8),
                                 _buildField(
@@ -516,7 +871,8 @@ Future<void> _signIn() async {
                                   icon: Icons.lock_outline_rounded,
                                   isPassword: true,
                                   validator: (v) {
-                                    if (v == null || v.isEmpty) {
+                                    if (v == null ||
+                                        v.isEmpty) {
                                       return 'Enter your password';
                                     }
                                     if (v.length < 6) {
@@ -526,83 +882,94 @@ Future<void> _signIn() async {
                                   },
                                 ),
 
-                                // Forgot password
                                 if (_isLogin) ...[
                                   const SizedBox(height: 12),
                                   Align(
-                                    alignment: Alignment.centerRight,
+                                    alignment:
+                                        Alignment.centerRight,
                                     child: GestureDetector(
                                       onTap: _forgotPassword,
-                                      child: const Text('Forgot password?',
-                                        style: TextStyle(
-                                          color: kAccentGreen,
-                                          fontSize: 13,
-                                          fontWeight: FontWeight.w600,
-                                        )),
+                                      child: const Text(
+                                          'Forgot password?',
+                                          style: TextStyle(
+                                            color: kAccentGreen,
+                                            fontSize: 13,
+                                            fontWeight:
+                                                FontWeight.w600,
+                                          )),
                                     ),
                                   ),
                                 ],
 
-                                // Error banner
                                 if (_errorMessage != null) ...[
                                   const SizedBox(height: 14),
                                   Container(
                                     width: double.infinity,
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 14, vertical: 10),
+                                    padding:
+                                        const EdgeInsets.symmetric(
+                                            horizontal: 14,
+                                            vertical: 10),
                                     decoration: BoxDecoration(
                                       color: const Color(0xFFFF4444)
                                           .withOpacity(0.1),
-                                      borderRadius: BorderRadius.circular(10),
+                                      borderRadius:
+                                          BorderRadius.circular(
+                                              10),
                                       border: Border.all(
-                                          color: const Color(0xFFFF4444)
+                                          color: const Color(
+                                                  0xFFFF4444)
                                               .withOpacity(0.3)),
                                     ),
                                     child: Row(children: [
-                                      const Icon(Icons.error_outline_rounded,
-                                          color: Color(0xFFFF6B6B), size: 16),
+                                      const Icon(
+                                          Icons
+                                              .error_outline_rounded,
+                                          color:
+                                              Color(0xFFFF6B6B),
+                                          size: 16),
                                       const SizedBox(width: 8),
                                       Expanded(
-                                        child: Text(_errorMessage!,
-                                          style: const TextStyle(
-                                            color: Color(0xFFFF6B6B),
-                                            fontSize: 13,
-                                            fontWeight: FontWeight.w500,
-                                          )),
+                                        child: Text(
+                                            _errorMessage!,
+                                            style: const TextStyle(
+                                              color:
+                                                  Color(0xFFFF6B6B),
+                                              fontSize: 13,
+                                              fontWeight:
+                                                  FontWeight.w500,
+                                            )),
                                       ),
                                     ]),
                                   ),
                                 ],
 
                                 const SizedBox(height: 28),
-
-                                // Submit button
                                 _buildSubmitBtn(),
                                 const SizedBox(height: 24),
 
-                                // Divider
                                 Row(children: [
-                                  Expanded(child: Container(
-                                      height: 1, color: kBorder)),
+                                  Expanded(
+                                      child: Container(
+                                          height: 1,
+                                          color: kBorder)),
                                   const Padding(
                                     padding: EdgeInsets.symmetric(
                                         horizontal: 12),
                                     child: Text('or continue with',
-                                      style: TextStyle(
-                                          color: kTextSecondary,
-                                          fontSize: 12)),
+                                        style: TextStyle(
+                                            color: kTextSecondary,
+                                            fontSize: 12)),
                                   ),
-                                  Expanded(child: Container(
-                                      height: 1, color: kBorder)),
+                                  Expanded(
+                                      child: Container(
+                                          height: 1,
+                                          color: kBorder)),
                                 ]),
 
                                 const SizedBox(height: 20),
-
-                                // Google button
                                 _buildGoogleBtn(),
                                 const SizedBox(height: 24),
 
-                                // Toggle sign in / sign up
                                 Center(
                                   child: GestureDetector(
                                     onTap: _toggleMode,
@@ -621,7 +988,8 @@ Future<void> _signIn() async {
                                                 : 'Sign In',
                                             style: const TextStyle(
                                               color: kAccentGreen,
-                                              fontWeight: FontWeight.w700,
+                                              fontWeight:
+                                                  FontWeight.w700,
                                             )),
                                         ],
                                       ),
@@ -637,84 +1005,94 @@ Future<void> _signIn() async {
 
                     const SizedBox(height: 24),
 
-                 
-// ── Worker CTA Section
-FadeTransition(
-  opacity: _fadeAnim,
-  child: Padding(
-    padding: const EdgeInsets.only(bottom: 32.0), // Give it some breathing room at the bottom
-    child: Center(
-      child: Material(
-        color: Colors.transparent, // Keeps the background clear
-        child: InkWell(
-          onTap: () {
-            // This navigates to your registration page
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => const WorkerRegisterScreen(),
-              ),
-            );
-          },
-          borderRadius: BorderRadius.circular(16),
-          splashColor: kAccentGreen.withOpacity(0.1),
-          child: Container(
-            margin: const EdgeInsets.symmetric(horizontal: 16),
-            padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
-            decoration: BoxDecoration(
-              border: Border.all(
-                color: kBorder.withOpacity(0.6), 
-                width: 1,
-              ),
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min, // Shrinks container to fit content
-              children: [
-                Container(
-                  width: 36,
-                  height: 36,
-                  decoration: BoxDecoration(
-                    color: kPrimaryGreen.withOpacity(0.15),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: const Icon(
-                    Icons.handyman_outlined,
-                    color: kAccentGreen,
-                    size: 18,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                const Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      'Are you a repair professional?',
-                      style: TextStyle(
-                        color: kTextPrimary,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
+                    // ── Worker CTA
+                    FadeTransition(
+                      opacity: _fadeAnim,
+                      child: Padding(
+                        padding:
+                            const EdgeInsets.only(bottom: 32.0),
+                        child: Center(
+                          child: Material(
+                            color: Colors.transparent,
+                            child: InkWell(
+                              onTap: () => Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                    builder: (context) =>
+                                        const WorkerRegisterScreen()),
+                              ),
+                              borderRadius:
+                                  BorderRadius.circular(16),
+                              splashColor:
+                                  kAccentGreen.withOpacity(0.1),
+                              child: Container(
+                                margin: const EdgeInsets.symmetric(
+                                    horizontal: 16),
+                                padding:
+                                    const EdgeInsets.symmetric(
+                                        vertical: 16,
+                                        horizontal: 20),
+                                decoration: BoxDecoration(
+                                  border: Border.all(
+                                    color:
+                                        kBorder.withOpacity(0.6),
+                                    width: 1,
+                                  ),
+                                  borderRadius:
+                                      BorderRadius.circular(16),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Container(
+                                      width: 36, height: 36,
+                                      decoration: BoxDecoration(
+                                        color: kPrimaryGreen
+                                            .withOpacity(0.15),
+                                        borderRadius:
+                                            BorderRadius.circular(
+                                                10),
+                                      ),
+                                      child: const Icon(
+                                          Icons.handyman_outlined,
+                                          color: kAccentGreen,
+                                          size: 18),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    const Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      mainAxisSize:
+                                          MainAxisSize.min,
+                                      children: [
+                                        Text(
+                                          'Are you a repair professional?',
+                                          style: TextStyle(
+                                            color: kTextPrimary,
+                                            fontSize: 13,
+                                            fontWeight:
+                                                FontWeight.w600,
+                                          ),
+                                        ),
+                                        Text(
+                                          'Join as a worker →',
+                                          style: TextStyle(
+                                            color: kAccentGreen,
+                                            fontSize: 12,
+                                            fontWeight:
+                                                FontWeight.w500,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
                       ),
                     ),
-                    Text(
-                      'Join as a worker →',
-                      style: TextStyle(
-                        color: kAccentGreen,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    ),
-  ),
-),
 
                     const SizedBox(height: 32),
                   ],
@@ -727,7 +1105,7 @@ FadeTransition(
     );
   }
 
-  // ── Helper Widgets ─────────────────────────────────────────────────────────
+  // ── Helper widgets ─────────────────────────────────────────────────────────
 
   Widget _buildTabs() {
     return Container(
@@ -758,12 +1136,14 @@ FadeTransition(
           ),
           child: Center(
             child: Text(label,
-              style: TextStyle(
-                color: active ? Colors.white : kTextSecondary,
-                fontSize: 14,
-                fontWeight:
-                    active ? FontWeight.w700 : FontWeight.w500,
-              )),
+                style: TextStyle(
+                  color:
+                      active ? Colors.white : kTextSecondary,
+                  fontSize: 14,
+                  fontWeight: active
+                      ? FontWeight.w700
+                      : FontWeight.w500,
+                )),
           ),
         ),
       ),
@@ -771,12 +1151,12 @@ FadeTransition(
   }
 
   Widget _buildLabel(String text) => Text(text,
-    style: const TextStyle(
-      color: kTextSecondary,
-      fontSize: 12,
-      fontWeight: FontWeight.w600,
-      letterSpacing: 0.5,
-    ));
+      style: const TextStyle(
+        color: kTextSecondary,
+        fontSize: 12,
+        fontWeight: FontWeight.w600,
+        letterSpacing: 0.5,
+      ));
 
   Widget _buildField({
     required TextEditingController controller,
@@ -797,10 +1177,10 @@ FadeTransition(
           fontWeight: FontWeight.w500),
       decoration: InputDecoration(
         hintText: hint,
-        hintStyle:
-            const TextStyle(color: Color(0xFF555555), fontSize: 15),
-        prefixIcon: Icon(icon,
-            color: const Color(0xFF555555), size: 20),
+        hintStyle: const TextStyle(
+            color: Color(0xFF555555), fontSize: 15),
+        prefixIcon:
+            Icon(icon, color: const Color(0xFF555555), size: 20),
         suffixIcon: isPassword
             ? IconButton(
                 icon: Icon(
@@ -824,8 +1204,8 @@ FadeTransition(
             borderSide: const BorderSide(color: kBorder)),
         focusedBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(14),
-            borderSide:
-                const BorderSide(color: kAccentGreen, width: 1.5)),
+            borderSide: const BorderSide(
+                color: kAccentGreen, width: 1.5)),
         errorBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(14),
             borderSide:
@@ -844,7 +1224,8 @@ FadeTransition(
 
   Widget _buildSubmitBtn() {
     return GestureDetector(
-      onTap: _isLoading ? null : (_isLogin ? _signIn : _signUp),
+      onTap:
+          _isLoading ? null : (_isLogin ? _signIn : _signUp),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
         width: double.infinity,
@@ -900,31 +1281,30 @@ FadeTransition(
             Container(
               width: 22, height: 22,
               decoration: const BoxDecoration(
-                  shape: BoxShape.circle, color: Colors.white),
+                  shape: BoxShape.circle,
+                  color: Colors.white),
               child: const Center(
                 child: Text('G',
-                  style: TextStyle(
-                    color: Color(0xFF4285F4),
-                    fontWeight: FontWeight.w800,
-                    fontSize: 13,
-                  )),
+                    style: TextStyle(
+                      color: Color(0xFF4285F4),
+                      fontWeight: FontWeight.w800,
+                      fontSize: 13,
+                    )),
               ),
             ),
             const SizedBox(width: 10),
             const Text('Continue with Google',
-              style: TextStyle(
-                color: kTextPrimary,
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-              )),
+                style: TextStyle(
+                  color: kTextPrimary,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                )),
           ],
         ),
       ),
     );
   }
 }
-
-
 
 extension on GoogleSignInAuthentication {
   String? get accessToken => null;

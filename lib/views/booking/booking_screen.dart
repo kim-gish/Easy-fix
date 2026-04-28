@@ -212,6 +212,7 @@ class _BookingScreenState extends State<BookingScreen>
         'amount':            0,
         'paymentRequested':  false,
         'createdAt':         DateTime.now().toIso8601String(),
+        'rated': false,
       });
 
       if (mounted) _showSuccessSheet(jobRef.id);

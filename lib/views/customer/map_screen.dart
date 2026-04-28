@@ -5,7 +5,6 @@ import 'package:latlong2/latlong.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../booking/booking_screen.dart';
-import '../booking/job_status_screen.dart';
 
 // ─── Constants (matching your theme) ─────────────────────────────────────────
 const Color kPrimaryGreen  = Color(0xFF1A7A4A);
@@ -240,7 +239,7 @@ class _MapScreenState extends State<MapScreen> with TickerProviderStateMixin {
               initialZoom: 15.0,
               maxZoom: 19.0,
               minZoom: 5.0,
-              onTap: (_, __) => _deselectWorker(),
+              onTap: (_, _) => _deselectWorker(),
             ),
             children: [
               // Map tiles
@@ -716,7 +715,7 @@ class _MapScreenState extends State<MapScreen> with TickerProviderStateMixin {
                   Navigator.push(
                     context,
                     PageRouteBuilder(
-                      pageBuilder: (_, animation, __) => BookingScreen(
+                      pageBuilder: (_, animation, _) => BookingScreen(
                         workerId:       _selectedWorker!.id,
                         workerName:     _selectedWorker!.name,
                         workerTrade:    _selectedWorker!.trade,
@@ -724,7 +723,7 @@ class _MapScreenState extends State<MapScreen> with TickerProviderStateMixin {
                         workerInitials: _selectedWorker!.initials,
                         distance:       _getDistance(_selectedWorker!),
                       ),
-                      transitionsBuilder: (_, animation, __, child) =>
+                      transitionsBuilder: (_, animation, _, child) =>
                           SlideTransition(
                             position: Tween<Offset>(
                               begin: const Offset(0, 1),

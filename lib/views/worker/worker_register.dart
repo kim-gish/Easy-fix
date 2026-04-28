@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'worker_dashboard.dart';
@@ -152,6 +151,8 @@ class _WorkerRegisterScreenState extends State<WorkerRegisterScreen>
         'longitude':   36.8219,
         'role':        'worker',
         'createdAt':   DateTime.now().toIso8601String(),
+        'approved':   false,
+        'suspended':  false,
       });
 if (mounted) {
         // Use pushAndRemoveUntil to ensure they can't "back" into the registration form
